@@ -1,7 +1,13 @@
+using FoodJS.Api.Data;
+using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 using FoodJS.Api.Features.Menu;
 
 var builder = WebApplication.CreateBuilder(args);
+
+builder.Services.AddDbContext<FoodJsDbContext>(options =>
+    options.UseSqlite(
+        builder.Configuration.GetConnectionString("DefaultConnection")));
 
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();

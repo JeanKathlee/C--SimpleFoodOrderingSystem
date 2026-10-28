@@ -8,6 +8,11 @@ node_modules/
 frontend/.env.local
 backend/.env
 
+# SQLite
+*.db
+*.db-shm
+*.db-wal
+
 # Ignore logs
 npm-debug.log*
 yarn-debug.log*
