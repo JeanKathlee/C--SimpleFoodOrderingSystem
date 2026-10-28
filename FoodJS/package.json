@@ -5,9 +5,11 @@
   "scripts": {
     "dev:frontend": "npm run dev --prefix frontend",
     "dev:backend": "npm run dev --prefix backend",
+    "dev:backend:csharp": "dotnet watch --project backend-csharp/FoodJS.Api/FoodJS.Api.csproj",
     "start": "npm start --prefix backend",
     "build": "npm run build:frontend",
     "build:frontend": "npm run build --prefix frontend",
+    "build:backend:csharp": "dotnet build backend-csharp/FoodJS.Backend.slnx",
     "preview:frontend": "npm run preview --prefix frontend",
     "install:frontend": "npm install --prefix frontend",
     "install:backend": "npm install --prefix backend",
