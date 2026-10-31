@@ -212,4 +212,50 @@ router.patch('/me', verifyToken, (req, res) => {
   return res.json(buildSafeUser(currentUser));
 });
 
+router.patch('/:id', verifyToken, requireAdmin, (req, res) => {
+  const { firstName, lastName, mobileNumber, address, profileImage } = req.body || {};
+  const userId = Number(req.params.id);
+  const data = readJsonFromData('users.json');
+  const customer = (data.users || []).find((user) => user.id === userId);
+
+  if (!customer || customer.role !== 'customer') {
+    return res.status(404).json({ message: 'Customer not found.' });
+  }
+
+  if (firstName !== undefined) {
+    const cleanFirstName = String(firstName).trim();
+    if (!cleanFirstName) {
+      return res.status(400).json({ message: 'First name cannot be empty.' });
+    }
+    customer.firstName = cleanFirstName;
+  }
+
+  if (lastName !== undefined) {
+    const cleanLastName = String(lastName).trim();
+    if (!cleanLastName) {
+      return res.status(400).json({ message: 'Last name cannot be empty.' });
+    }
+    customer.lastName = cleanLastName;
+  }
+
+  if (firstName !== undefined || lastName !== undefined) {
+    customer.name = `${customer.firstName} ${customer.lastName}`.trim();
+  }
+
+  if (mobileNumber !== undefined) {
+    customer.mobileNumber = String(mobileNumber || '').trim();
+  }
+
+  if (address !== undefined) {
+    customer.address = String(address || '').trim();
+  }
+
+  if (profileImage !== undefined) {
+    customer.profileImage = String(profileImage || '').trim();
+  }
+
+  writeJsonToData('users.json', data);
+  return res.json(buildSafeUser(customer));
+});
+
 module.exports = router;

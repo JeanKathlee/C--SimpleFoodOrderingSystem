@@ -18,11 +18,50 @@ function formatCurrency(value) {
   }).format(value);
 }
 
-export default function CustomersPanel({ customers, orders, selectedCustomer, onViewCustomer, onClose }) {
+import { useEffect, useState } from "react";
+
+export default function CustomersPanel({
+  customers,
+  orders,
+  selectedCustomer,
+  onViewCustomer,
+  onClose,
+  onUpdateCustomer,
+}) {
+  const [editing, setEditing] = useState(false);
+  const [form, setForm] = useState(null);
+
   const selectedOrders = selectedCustomer
     ? orders.filter((order) => String(order.userId) === String(selectedCustomer.id))
     : [];
   const totalSpent = selectedOrders.reduce((total, order) => total + order.total, 0);
+
+  useEffect(() => {
+    setEditing(false);
+    setForm(
+      selectedCustomer
+        ? {
+            firstName: selectedCustomer.firstName || "",
+            lastName: selectedCustomer.lastName || "",
+            mobileNumber: selectedCustomer.mobileNumber || "",
+            address: selectedCustomer.address || "",
+          }
+        : null
+    );
+  }, [selectedCustomer]);
+
+  const handleFormChange = (event) => {
+    const { name, value } = event.target;
+    setForm((current) => ({ ...current, [name]: value }));
+  };
+
+  const handleSubmit = async (event) => {
+    event.preventDefault();
+    const updated = await onUpdateCustomer(selectedCustomer.id, form);
+    if (updated) {
+      setEditing(false);
+    }
+  };
 
   return (
     <>
@@ -88,41 +127,78 @@ export default function CustomersPanel({ customers, orders, selectedCustomer, on
                 <h3>{selectedCustomer.name}</h3>
                 <p className="admin-panel-subtitle">Customer profile</p>
               </div>
-              <button type="button" className="admin-btn admin-btn-light" onClick={onClose}>
-                Close
-              </button>
+              <div className="admin-item-actions">
+                <button
+                  type="button"
+                  className="admin-btn admin-btn-primary"
+                  onClick={() => setEditing((current) => !current)}
+                >
+                  {editing ? "Cancel Edit" : "Edit Profile"}
+                </button>
+                <button type="button" className="admin-btn admin-btn-light" onClick={onClose}>
+                  Close
+                </button>
+              </div>
             </div>
 
-            <dl className="customer-profile-details">
-              <div><dt>Email</dt><dd>{selectedCustomer.email || "Not provided"}</dd></div>
-              <div><dt>Mobile number</dt><dd>{selectedCustomer.mobileNumber || "Not provided"}</dd></div>
-              <div><dt>Address</dt><dd>{selectedCustomer.address || "Not provided"}</dd></div>
-              <div><dt>Joined</dt><dd>{formatDate(selectedCustomer.createdAt)}</dd></div>
-              <div><dt>Total orders</dt><dd>{selectedOrders.length}</dd></div>
-              <div><dt>Total spent</dt><dd>{formatCurrency(totalSpent)}</dd></div>
-            </dl>
-
-            <h4 className="customer-profile-section-title">Recent orders</h4>
-            {selectedOrders.length === 0 ? (
-              <p className="admin-panel-subtitle">This customer has no orders.</p>
+            {editing ? (
+              <form className="customer-profile-form" onSubmit={handleSubmit}>
+                <label>
+                  <span>First name</span>
+                  <input name="firstName" value={form?.firstName || ""} onChange={handleFormChange} required />
+                </label>
+                <label>
+                  <span>Last name</span>
+                  <input name="lastName" value={form?.lastName || ""} onChange={handleFormChange} required />
+                </label>
+                <label>
+                  <span>Mobile number</span>
+                  <input name="mobileNumber" value={form?.mobileNumber || ""} onChange={handleFormChange} />
+                </label>
+                <label>
+                  <span>Address</span>
+                  <textarea name="address" value={form?.address || ""} onChange={handleFormChange} />
+                </label>
+                <div className="admin-modal-actions">
+                  <button type="submit" className="admin-btn admin-btn-primary">Save Changes</button>
+                </div>
+              </form>
             ) : (
-              <div className="admin-table-wrap">
-                <table className="admin-table">
-                  <thead>
-                    <tr><th>Order ID</th><th>Status</th><th>Total</th><th>Created</th></tr>
-                  </thead>
-                  <tbody>
-                    {selectedOrders.map((order) => (
-                      <tr key={order.id}>
-                        <td>{order.id}</td>
-                        <td><span className={`admin-status ${order.status.toLowerCase()}`}>{order.status}</span></td>
-                        <td>{formatCurrency(order.total)}</td>
-                        <td>{formatDate(order.createdAt)}</td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
+              <dl className="customer-profile-details">
+                <div><dt>Email</dt><dd>{selectedCustomer.email || "Not provided"}</dd></div>
+                <div><dt>Mobile number</dt><dd>{selectedCustomer.mobileNumber || "Not provided"}</dd></div>
+                <div><dt>Address</dt><dd>{selectedCustomer.address || "Not provided"}</dd></div>
+                <div><dt>Joined</dt><dd>{formatDate(selectedCustomer.createdAt)}</dd></div>
+                <div><dt>Total orders</dt><dd>{selectedOrders.length}</dd></div>
+                <div><dt>Total spent</dt><dd>{formatCurrency(totalSpent)}</dd></div>
+              </dl>
+            )}
+
+            {!editing && (
+              <>
+                <h4 className="customer-profile-section-title">Recent orders</h4>
+                {selectedOrders.length === 0 ? (
+                  <p className="admin-panel-subtitle">This customer has no orders.</p>
+                ) : (
+                  <div className="admin-table-wrap">
+                    <table className="admin-table">
+                      <thead>
+                        <tr><th>Order ID</th><th>Status</th><th>Total</th><th>Created</th></tr>
+                      </thead>
+                      <tbody>
+                        {selectedOrders.map((order) => (
+                          <tr key={order.id}>
+                            <td>{order.id}</td>
+                            <td><span className={`admin-status ${order.status.toLowerCase()}`}>{order.status}</span></td>
+                            <td>{formatCurrency(order.total)}</td>
+                            <td>{formatDate(order.createdAt)}</td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                )}
+              </>
             )}
           </div>
         </div>

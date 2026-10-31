@@ -264,6 +264,37 @@
   margin: 0 0 8px;
 }
 
+.customer-profile-form {
+  display: grid;
+  gap: 12px;
+  margin: 16px 0 20px;
+}
+
+.customer-profile-form label {
+  display: grid;
+  gap: 5px;
+  color: var(--admin-muted);
+  font-size: 13px;
+  font-weight: 600;
+}
+
+.customer-profile-form input,
+.customer-profile-form textarea {
+  width: 100%;
+  border: 1px solid var(--admin-border);
+  border-radius: 8px;
+  padding: 9px 10px;
+  color: var(--admin-text);
+  background: var(--admin-white);
+  font: inherit;
+  font-weight: 400;
+}
+
+.customer-profile-form textarea {
+  min-height: 76px;
+  resize: vertical;
+}
+
 .admin-revenue-chart {
   display: grid;
   grid-template-columns: repeat(7, minmax(0, 1fr));

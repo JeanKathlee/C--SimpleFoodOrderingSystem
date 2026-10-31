@@ -225,6 +225,37 @@ export default function Dashboard() {
     }
   };
 
+  const handleUpdateCustomer = async (customerId, changes) => {
+    try {
+      const currentSession = getAuthSession();
+      const response = await fetch(`/api/users/${customerId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${currentSession?.token || ""}`,
+        },
+        body: JSON.stringify(changes),
+      });
+      const payload = await response.json();
+
+      if (!response.ok) {
+        errorNotif(payload?.message || "Unable to update customer profile.");
+        return null;
+      }
+
+      setCustomers((current) =>
+        current.map((customer) => (customer.id === payload.id ? payload : customer))
+      );
+      setSelectedCustomer(payload);
+      success("Customer profile updated successfully.");
+      return payload;
+    } catch (error) {
+      console.error("Failed to update customer profile:", error);
+      errorNotif("Unable to update customer profile right now.");
+      return null;
+    }
+  };
+
   const handleUpdateOrderStatus = async (orderId, newStatus) => {
     try {
       const response = await fetch(`/api/orders/${orderId}/status`, {
@@ -736,6 +767,7 @@ export default function Dashboard() {
             selectedCustomer={selectedCustomer}
             onViewCustomer={setSelectedCustomer}
             onClose={() => setSelectedCustomer(null)}
+            onUpdateCustomer={handleUpdateCustomer}
           />
         )}
 
