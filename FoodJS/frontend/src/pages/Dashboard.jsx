@@ -11,6 +11,7 @@ import CategoryManagement from "../components/admin/CategoryManagement";
 import CouponManagement from "../components/admin/CouponManagement";
 import PopularItems from "../components/admin/PopularItems";
 import ConfirmModal from "../components/admin/ConfirmModal";
+import CustomersPanel from "../components/admin/CustomersPanel";
 import { useNotification } from "../hooks/useNotification";
 import "../dashboard.css";
 
@@ -89,7 +90,8 @@ function normalizeOrders(items = []) {
       total,
       itemCount,
       createdAt: order.createdAt || new Date().toISOString(),
-      items: order.items || []
+      items: order.items || [],
+      userId: order.userId,
     };
   });
 }
@@ -124,6 +126,8 @@ export default function Dashboard() {
   const [menuItems, setMenuItems] = useState([]);
   const [coupons, setCoupons] = useState([]);
   const [allOrders, setAllOrders] = useState([]);
+  const [customers, setCustomers] = useState([]);
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [weeklyRevenue, setWeeklyRevenue] = useState(DEFAULT_WEEKLY_REVENUE);
   const [statusOptions, setStatusOptions] = useState(DEFAULT_STATUS_OPTIONS);
   const [filters, setFilters] = useState({
@@ -207,6 +211,20 @@ export default function Dashboard() {
     }
   };
 
+  const loadCustomers = async () => {
+    try {
+      const response = await fetch("/api/users", {
+        headers: { Authorization: `Bearer ${session?.token || ""}` },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setCustomers(Array.isArray(data) ? data.filter((user) => user.role === "customer") : []);
+      }
+    } catch (_error) {
+      errorNotif("Unable to load customers");
+    }
+  };
+
   const handleUpdateOrderStatus = async (orderId, newStatus) => {
     try {
       const response = await fetch(`/api/orders/${orderId}/status`, {
@@ -272,9 +290,11 @@ export default function Dashboard() {
   useEffect(() => {
     loadAdminData();
     loadAllOrders();
+    loadCustomers();
     const pollingId = setInterval(() => {
       loadAdminData();
       loadAllOrders();
+      loadCustomers();
     }, 15000);
 
     return () => clearInterval(pollingId);
@@ -706,6 +726,16 @@ export default function Dashboard() {
             isAdmin={true}
             onUpdateStatus={handleUpdateOrderStatus}
             onDeleteOrder={handleDeleteOrder}
+          />
+        )}
+
+        {activeSection === "customers" && (
+          <CustomersPanel
+            customers={customers}
+            orders={allOrders}
+            selectedCustomer={selectedCustomer}
+            onViewCustomer={setSelectedCustomer}
+            onClose={() => setSelectedCustomer(null)}
           />
         )}
 

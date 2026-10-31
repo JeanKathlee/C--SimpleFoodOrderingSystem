@@ -3,7 +3,7 @@ const bcrypt = require('bcryptjs');
 const jwt = require('jsonwebtoken');
 const { readJsonFromData } = require('../lib/readJson');
 const { writeJsonToData } = require('../lib/writeJson');
-const { verifyToken } = require('../middleware/auth');
+const { verifyToken, requireAdmin } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -146,7 +146,7 @@ router.post('/login', async (req, res) => {
   });
 });
 
-router.get('/', (_req, res) => {
+router.get('/', verifyToken, requireAdmin, (_req, res) => {
   const data = readJsonFromData('users.json');
   const safeUsers = (data.users || []).map(({ passwordHash, ...user }) => buildSafeUser(user));
   res.json(safeUsers);
