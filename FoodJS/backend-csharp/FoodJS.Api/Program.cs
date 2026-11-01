@@ -1,6 +1,7 @@
 using FoodJS.Api.Data;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
+using FoodJS.Api.Features.Coupons;
 using FoodJS.Api.Features.Menu;
 
 var builder = WebApplication.CreateBuilder(args);
@@ -37,6 +38,7 @@ builder.Services.AddCors(options =>
 // Each feature registers its own service here. Replace the in-memory example
 // with an Entity Framework Core implementation when persistence is added.
 builder.Services.AddSingleton<IMenuService, InMemoryMenuService>();
+builder.Services.AddScoped<ICouponService, CouponService>();
 
 var app = builder.Build();
 
