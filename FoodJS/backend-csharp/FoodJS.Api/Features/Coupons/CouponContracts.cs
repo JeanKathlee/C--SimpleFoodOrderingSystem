@@ -27,3 +27,20 @@ public sealed class CreateCouponRequest
 
     public string? Description { get; init; }
 }
+
+public sealed class UpdateCouponRequest
+{
+    public string? Code { get; init; }
+
+    public decimal Discount { get; init; }
+
+    public string? DiscountType { get; init; }
+
+    public decimal MinOrderAmount { get; init; }
+
+    public DateOnly? ExpiryDate { get; init; }
+
+    public int? MaxUses { get; init; }
+
+    public string? Description { get; init; }
+}

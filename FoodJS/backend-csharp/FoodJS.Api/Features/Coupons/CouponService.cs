@@ -26,6 +26,26 @@ public sealed class CouponService(FoodJsDbContext dbContext) : ICouponService
             .ToArrayAsync(cancellationToken);
     }
 
+    public async Task<CouponResponse?> GetByIdAsync(
+        int id,
+        CancellationToken cancellationToken)
+    {
+        return await dbContext.Coupons
+            .AsNoTracking()
+            .Where(coupon => coupon.Id == id)
+            .Select(coupon => new CouponResponse(
+                coupon.Id,
+                coupon.Code,
+                coupon.Discount,
+                coupon.DiscountType,
+                coupon.MinimumOrderAmount,
+                coupon.ExpiryDate,
+                coupon.MaximumUses ?? -1,
+                coupon.UsedCount,
+                coupon.Description))
+            .SingleOrDefaultAsync(cancellationToken);
+    }
+
     public async Task<CouponResponse?> CreateAsync(
         CreateCouponRequest request,
         CancellationToken cancellationToken)
@@ -63,5 +83,44 @@ public sealed class CouponService(FoodJsDbContext dbContext) : ICouponService
             coupon.MaximumUses ?? -1,
             coupon.UsedCount,
             coupon.Description);
+    }
+
+    public async Task<UpdateCouponResult> UpdateAsync(
+        int id,
+        UpdateCouponRequest request,
+        CancellationToken cancellationToken)
+    {
+        var coupon = await dbContext.Coupons
+            .SingleOrDefaultAsync(candidate => candidate.Id == id, cancellationToken);
+
+        if (coupon is null)
+        {
+            return UpdateCouponResult.NotFound;
+        }
+
+        var code = request.Code!.Trim().ToUpperInvariant();
+        var alreadyExists = await dbContext.Coupons
+            .AnyAsync(candidate => candidate.Id != id &&
+                candidate.Code.ToUpper() == code, cancellationToken);
+
+        if (alreadyExists)
+        {
+            return UpdateCouponResult.CodeAlreadyExists;
+        }
+
+        coupon.Code = code;
+        coupon.Discount = request.Discount;
+        coupon.DiscountType = request.DiscountType!.Trim();
+        coupon.MinimumOrderAmount = request.MinOrderAmount;
+        coupon.MaximumUses = request.MaxUses ?? -1;
+        coupon.Description = request.Description?.Trim() ?? string.Empty;
+
+        if (request.ExpiryDate is not null)
+        {
+            coupon.ExpiryDate = request.ExpiryDate.Value;
+        }
+
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return UpdateCouponResult.Updated;
     }
 }

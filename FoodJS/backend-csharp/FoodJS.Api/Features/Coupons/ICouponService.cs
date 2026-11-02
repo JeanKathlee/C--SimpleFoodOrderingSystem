@@ -8,4 +8,20 @@ public interface ICouponService
     Task<CouponResponse?> CreateAsync(
         CreateCouponRequest request,
         CancellationToken cancellationToken);
+
+    Task<UpdateCouponResult> UpdateAsync(
+        int id,
+        UpdateCouponRequest request,
+        CancellationToken cancellationToken);
+
+    Task<CouponResponse?> GetByIdAsync(
+        int id,
+        CancellationToken cancellationToken);
+}
+
+public enum UpdateCouponResult
+{
+    NotFound,
+    CodeAlreadyExists,
+    Updated
 }
