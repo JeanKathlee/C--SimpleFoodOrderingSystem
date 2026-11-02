@@ -17,6 +17,10 @@ public interface ICouponService
     Task<CouponResponse?> GetByIdAsync(
         int id,
         CancellationToken cancellationToken);
+
+    Task<CouponValidationResponse> ValidateAsync(
+        ValidateCouponRequest request,
+        CancellationToken cancellationToken);
 }
 
 public enum UpdateCouponResult

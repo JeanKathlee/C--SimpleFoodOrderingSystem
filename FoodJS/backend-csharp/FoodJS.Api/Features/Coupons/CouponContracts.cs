@@ -11,6 +11,20 @@ public sealed record CouponResponse(
     int UsedCount,
     string Description);
 
+public sealed class ValidateCouponRequest
+{
+    public string? Code { get; init; }
+
+    public decimal? OrderAmount { get; init; }
+}
+
+public sealed record CouponValidationResponse(
+    bool Valid,
+    string? Error,
+    CouponResponse? Coupon,
+    decimal DiscountAmount,
+    decimal FinalAmount);
+
 public sealed class CreateCouponRequest
 {
     public string? Code { get; init; }

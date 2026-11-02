@@ -11,6 +11,24 @@ public sealed class CouponController(ICouponService couponService) : ControllerB
         CancellationToken cancellationToken) =>
         Ok(await couponService.GetAllAsync(cancellationToken));
 
+    [HttpPost("validate")]
+    public async Task<ActionResult<CouponValidationResponse>> Validate(
+        ValidateCouponRequest request,
+        CancellationToken cancellationToken)
+    {
+        if (string.IsNullOrWhiteSpace(request.Code) ||
+            request.OrderAmount is null ||
+            request.OrderAmount < 0)
+        {
+            return BadRequest(new
+            {
+                message = "Code and a non-negative orderAmount are required"
+            });
+        }
+
+        return Ok(await couponService.ValidateAsync(request, cancellationToken));
+    }
+
     [HttpPost]
     public async Task<ActionResult<CouponResponse>> Create(
         CreateCouponRequest request,
