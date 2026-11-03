@@ -192,4 +192,21 @@ public sealed class CouponService(FoodJsDbContext dbContext) : ICouponService
         await dbContext.SaveChangesAsync(cancellationToken);
         return UpdateCouponResult.Updated;
     }
+
+    public async Task<bool> DeleteAsync(
+        int id,
+        CancellationToken cancellationToken)
+    {
+        var coupon = await dbContext.Coupons
+            .SingleOrDefaultAsync(candidate => candidate.Id == id, cancellationToken);
+
+        if (coupon is null)
+        {
+            return false;
+        }
+
+        dbContext.Coupons.Remove(coupon);
+        await dbContext.SaveChangesAsync(cancellationToken);
+        return true;
+    }
 }

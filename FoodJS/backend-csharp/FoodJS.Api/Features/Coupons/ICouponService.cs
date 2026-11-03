@@ -14,6 +14,10 @@ public interface ICouponService
         UpdateCouponRequest request,
         CancellationToken cancellationToken);
 
+    Task<bool> DeleteAsync(
+        int id,
+        CancellationToken cancellationToken);
+
     Task<CouponResponse?> GetByIdAsync(
         int id,
         CancellationToken cancellationToken);

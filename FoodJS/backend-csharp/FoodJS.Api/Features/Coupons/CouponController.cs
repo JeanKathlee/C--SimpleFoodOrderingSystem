@@ -91,4 +91,15 @@ public sealed class CouponController(ICouponService couponService) : ControllerB
             _ => Ok(await couponService.GetByIdAsync(id, cancellationToken))
         };
     }
+
+    [HttpDelete("{id:int}")]
+    public async Task<IActionResult> Delete(
+        int id,
+        CancellationToken cancellationToken)
+    {
+        var deleted = await couponService.DeleteAsync(id, cancellationToken);
+        return deleted
+            ? Ok(new { message = "Coupon deleted successfully." })
+            : NotFound(new { message = "Coupon not found." });
+    }
 }
