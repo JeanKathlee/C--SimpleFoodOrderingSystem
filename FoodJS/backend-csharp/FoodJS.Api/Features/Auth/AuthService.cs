@@ -16,7 +16,7 @@ public sealed class AuthService(FoodJsDbContext db, IConfiguration config, IHttp
     public const string AdminRole = "admin";
     public const string CustomerRole = "customer";
 
-    // use this same hasher when saving new passwords (like on register), or login won't match
+    // use this same hasher when saving new passwords (like on register) or login won't match
     public static readonly PasswordHasher<User> Hasher = new();
 
     public static SymmetricSecurityKey SigningKey(IConfiguration config) =>
