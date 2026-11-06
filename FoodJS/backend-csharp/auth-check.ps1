@@ -32,7 +32,12 @@ Check "wrong password" (Call POST /users/login @{ email = "admin@foodjs.demo"; p
 Check "missing fields" (Call POST /users/login @{ email = "" }).Status 400
 Check "google without code" (Call POST /auth/google/callback @{}).Status 400
 
-Check "menu list is public" (Call GET /menu).Status 200
+$menu = Call GET /menu
+Check "menu list is public" $menu.Status 200
+Check "menu list has seeded food" (@($menu.Body).Count -ge 8) $true
+Check "menu item has category name" (@($menu.Body)[0].category) "Burgers"
+Check "customer menu has only available items" (@($menu.Body | Where-Object { -not $_.isAvailable }).Count) 0
+Check "admin menu list" (Call GET /menu $null $admin.Body.token).Status 200
 $noToken = Call POST /menu $menuItem
 Check "no token" $noToken.Status 401
 Check "no token message" $noToken.Body.message "Unauthorized. Token required."

@@ -6,11 +6,12 @@ namespace FoodJS.Api.Features.Menu;
 
 [ApiController]
 [Route("api/menu")]
-public sealed class MenuController(IMenuService menuService) : ControllerBase
+public sealed class MenuController(IMenuService menuService, MenuService menuDb) : ControllerBase
 {
+    // anyone can see the menu. if an admin is logged in, hidden items are shown too
     [HttpGet]
-    public ActionResult<IReadOnlyCollection<MenuItemResponse>> GetAll() =>
-        Ok(menuService.GetAll());
+    public async Task<ActionResult<List<MenuItemResponse>>> GetAll() =>
+        Ok(await menuDb.GetAllAsync(User.IsInRole(AuthService.AdminRole)));
 
     [HttpPost]
     [Authorize(Roles = AuthService.AdminRole)]

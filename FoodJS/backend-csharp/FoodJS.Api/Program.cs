@@ -51,6 +51,7 @@ builder.Services.AddSingleton<IMenuService, InMemoryMenuService>();
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<UsersService>();
+builder.Services.AddScoped<MenuService>();
 builder.Services.AddAuthorization();
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -92,7 +93,9 @@ var app = builder.Build();
 if (app.Environment.IsDevelopment())
 {
     using var scope = app.Services.CreateScope();
-    await AuthService.SeedDevelopmentDataAsync(scope.ServiceProvider.GetRequiredService<FoodJsDbContext>());
+    var db = scope.ServiceProvider.GetRequiredService<FoodJsDbContext>();
+    await AuthService.SeedDevelopmentDataAsync(db);
+    await MenuService.SeedDevelopmentDataAsync(db, app.Environment.ContentRootPath);
 }
 
 app.UseExceptionHandler();

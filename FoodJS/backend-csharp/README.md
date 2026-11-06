@@ -35,9 +35,11 @@ GET http://localhost:3001/api/health
 - `Program.cs` contains dependency registration and the HTTP middleware pipeline.
 - `appsettings*.json` contains safe, non-secret configuration.
 
-The Menu feature is the example to copy. It is intentionally in-memory so the
-template builds without database packages. Replace it with Entity Framework Core
-and PostgreSQL after the API contracts have been migrated.
+The Menu feature is the example to copy. The menu list (`GET /api/menu`) now comes
+from the database (`Features/Menu/MenuService.cs`). Customers only see available
+items; a logged-in admin sees hidden ones too. On the first run the old Node menu in
+`Data/Seed/*.json` is copied into the database. Add, edit and delete still use the
+in-memory example until they are moved over.
 
 ## Suggested team ownership
 
