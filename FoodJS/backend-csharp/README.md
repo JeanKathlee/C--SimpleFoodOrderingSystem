@@ -66,6 +66,14 @@ To lock your endpoints (same as `verifyToken` and `requireAdmin` in the old Node
 var userId = User.GetUserId();               // id of whoever is logged in
 ```
 
+User account endpoints (`Features/Users`):
+
+- `GET /api/users`: list all users (admin only)
+- `POST /api/users/register`: make a new customer account and log them in
+- `GET /api/users/me` and `PATCH /api/users/me`: see or edit your own account
+- `DELETE /api/users/{id}`: delete a customer (admin only). Admins can't be deleted, and you
+  can't delete yourself. Deleting a user also deletes their orders, cart, and addresses.
+
 When saving a new password (like on register), use
 `AuthService.Hasher.HashPassword(user, password)`, or login won't work for that user.
 

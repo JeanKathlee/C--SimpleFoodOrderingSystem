@@ -1,6 +1,7 @@
 # quick test for login and admin-only stuff. start the api first, then run:
 #   pwsh backend-csharp/auth-check.ps1
-$api = "http://localhost:3001/api"
+# (to test an api on another port: pwsh backend-csharp/auth-check.ps1 http://localhost:3002/api)
+param($api = "http://localhost:3001/api")
 $failed = 0
 
 function Call($method, $path, $body = $null, $token = $null) {
@@ -40,5 +41,41 @@ $forbidden = Call POST /menu $menuItem $customer.Body.token
 Check "customer blocked from admin" $forbidden.Status 403
 Check "forbidden message" $forbidden.Body.message "Forbidden. Admin access required."
 Check "admin allowed" (Call POST /menu $menuItem $admin.Body.token).Status 201
+
+# user accounts: register, list, edit, delete. uses a new email every run
+$email = "test$(Get-Date -Format 'yyyyMMddHHmmss')@foodjs.demo"
+$newUser = @{ email = $email; password = "secret1"; firstName = "Test"; lastName = "User"; address = "123 Main St" }
+
+Check "register missing fields" (Call POST /users/register @{ email = $email }).Status 400
+Check "register short password" (Call POST /users/register @{ email = $email; password = "123"; firstName = "a"; lastName = "b" }).Status 400
+Check "register bad email" (Call POST /users/register @{ email = "nope"; password = "secret1"; firstName = "a"; lastName = "b" }).Status 400
+$registered = Call POST /users/register $newUser
+Check "register" $registered.Status 201
+Check "register makes a customer" $registered.Body.user.role "customer"
+Check "register saves address" $registered.Body.user.address "123 Main St"
+Check "register same email again" (Call POST /users/register $newUser).Status 400
+Check "new user can log in" (Call POST /users/login @{ email = $email; password = "secret1" }).Status 200
+
+Check "user list needs login" (Call GET /users).Status 401
+Check "user list blocked for customer" (Call GET /users $null $customer.Body.token).Status 403
+$list = Call GET /users $null $admin.Body.token
+Check "user list for admin" $list.Status 200
+Check "user list has new user" (@($list.Body | Where-Object email -eq $email).Count) 1
+
+$me = Call GET /users/me $null $registered.Body.token
+Check "get my profile" $me.Body.email $email
+Check "edit with empty first name" (Call PATCH /users/me @{ firstName = " " } $registered.Body.token).Status 400
+$edited = Call PATCH /users/me @{ firstName = "Changed"; mobileNumber = "0917"; address = "456 New St" } $registered.Body.token
+Check "edit profile" $edited.Status 200
+Check "edit changes name" $edited.Body.name "Changed User"
+Check "edit changes address" $edited.Body.address "456 New St"
+Check "edit keeps one address" (@($edited.Body.addressBook).Count) 1
+
+$id = $registered.Body.user.id
+Check "delete blocked for customer" (Call DELETE "/users/$id" $null $customer.Body.token).Status 403
+Check "admin can't delete self" (Call DELETE "/users/$($admin.Body.user.id)" $null $admin.Body.token).Status 400
+Check "admin deletes user" (Call DELETE "/users/$id" $null $admin.Body.token).Status 200
+Check "delete again is not found" (Call DELETE "/users/$id" $null $admin.Body.token).Status 404
+Check "deleted user can't log in" (Call POST /users/login @{ email = $email; password = "secret1" }).Status 401
 
 if ($failed) { Write-Host "$failed check(s) failed"; exit 1 } else { Write-Host "All checks passed" }

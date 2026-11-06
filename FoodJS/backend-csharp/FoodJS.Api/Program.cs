@@ -4,6 +4,7 @@ using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 using FoodJS.Api.Features.Auth;
 using FoodJS.Api.Features.Menu;
+using FoodJS.Api.Features.Users;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -49,6 +50,7 @@ builder.Services.AddSingleton<IMenuService, InMemoryMenuService>();
 // to lock an endpoint add [Authorize], for admin only add [Authorize(Roles = AuthService.AdminRole)]
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<UsersService>();
 builder.Services.AddAuthorization();
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)

@@ -33,7 +33,7 @@ public sealed class AuthService(FoodJsDbContext db, IConfiguration config, IHttp
             return null;
         }
 
-        return new AuthResponse("Login successful.", CreateToken(user), ToResponse(user));
+        return await CreateSessionAsync(user, "Login successful.");
     }
 
     // if something goes wrong this throws an error with a message, the controller sends it back
@@ -99,8 +99,12 @@ public sealed class AuthService(FoodJsDbContext db, IConfiguration config, IHttp
             await db.SaveChangesAsync();
         }
 
-        return new AuthResponse("Login successful.", CreateToken(user), ToResponse(user));
+        return await CreateSessionAsync(user, "Login successful.");
     }
+
+    // logs the user in: gives back a new token plus the user's info
+    public async Task<AuthResponse> CreateSessionAsync(User user, string message) =>
+        new(message, CreateToken(user), await ToResponseAsync(user));
 
     // only runs on our own computers: makes the tables, the roles, and 2 demo users
     public static async Task SeedDevelopmentDataAsync(FoodJsDbContext db)
@@ -140,7 +144,7 @@ public sealed class AuthService(FoodJsDbContext db, IConfiguration config, IHttp
         await db.SaveChangesAsync();
     }
 
-    private Task<User?> FindByEmailAsync(string email) =>
+    public Task<User?> FindByEmailAsync(string email) =>
         db.Users.Include(u => u.Role).FirstOrDefaultAsync(u => u.Email.ToLower() == email.ToLower());
 
     // makes the login token, it holds the user id, email, and role
@@ -156,20 +160,32 @@ public sealed class AuthService(FoodJsDbContext db, IConfiguration config, IHttp
         SigningCredentials = new SigningCredentials(SigningKey(config), SecurityAlgorithms.HmacSha256),
     });
 
-    private static AuthUserResponse ToResponse(User user) => new(
-        user.Id,
-        user.FirstName,
-        user.LastName,
-        $"{user.FirstName} {user.LastName}".Trim(),
-        user.Email,
-        user.Role.Name,
-        user.MobileNumber ?? "",
-        "",
-        [],
-        user.ProfileImage ?? "",
-        "",
-        "",
-        user.CreatedAt);
+    // the user info we send to the react app (never the password)
+    // user.Role must be loaded first
+    public async Task<AuthUserResponse> ToResponseAsync(User user)
+    {
+        // main address first, the rest after it
+        var addresses = await db.Addresses
+            .Where(a => a.UserId == user.Id)
+            .OrderByDescending(a => a.IsDefault)
+            .Select(a => a.AddressLine1)
+            .ToArrayAsync();
+
+        return new(
+            user.Id,
+            user.FirstName,
+            user.LastName,
+            $"{user.FirstName} {user.LastName}".Trim(),
+            user.Email,
+            user.Role.Name,
+            user.MobileNumber ?? "",
+            addresses.FirstOrDefault() ?? "",
+            addresses,
+            user.ProfileImage ?? "",
+            "",
+            "",
+            user.CreatedAt);
+    }
 }
 
 public static class ClaimsPrincipalExtensions
