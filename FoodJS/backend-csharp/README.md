@@ -51,6 +51,41 @@ and PostgreSQL after the API contracts have been migrated.
 Adjust the assignments to match the size of the team. One feature should have
 one primary owner to avoid conflicting edits.
 
+## Authentication and authorization
+
+Normal login is `POST /api/users/login` and Google login is `POST /api/auth/google/callback`.
+Both send back `{ message, token, user }`. The React app saves the token and sends it with
+every request. Logout happens only in the React app: it deletes the saved token. A token
+stops working after 1 hour.
+
+To lock your endpoints (same as `verifyToken` and `requireAdmin` in the old Node code):
+
+```csharp
+[Authorize]                                  // must be logged in
+[Authorize(Roles = AuthService.AdminRole)]   // must be an admin
+var userId = User.GetUserId();               // id of whoever is logged in
+```
+
+When saving a new password (like on register), use
+`AuthService.Hasher.HashPassword(user, password)`, or login won't work for that user.
+
+When you run the API on your computer, it makes the tables and adds 2 demo users:
+
+- admin: `admin@foodjs.demo` / `admin123`
+- customer: `customer@foodjs.demo` / `customer123`
+
+Don't put secrets in `appsettings.json`. Set them like this:
+
+```powershell
+dotnet user-secrets set "Google:ClientSecret" "<secret>" --project backend-csharp/FoodJS.Api
+dotnet user-secrets set "Jwt:Secret" "<32+ random characters>" --project backend-csharp/FoodJS.Api
+```
+
+On your computer, `Jwt:Secret` has a test value already, so you can skip it. On a real
+server you have to set it.
+
+To test login, start the API and run `pwsh backend-csharp/auth-check.ps1`.
+
 ## Existing API contract to preserve
 
 - `/api/auth`
