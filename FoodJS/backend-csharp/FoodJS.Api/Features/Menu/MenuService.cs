@@ -8,16 +8,36 @@ namespace FoodJS.Api.Features.Menu;
 // menu items saved in the database. add, edit and delete still use InMemoryMenuService for now
 public sealed class MenuService(FoodJsDbContext db)
 {
-    // customers only see items that are available, admins see everything (so they can turn items back on)
-    public async Task<List<MenuItemResponse>> GetAllAsync(bool showHidden)
+    // customers only see items that are available, admins see everything (so they can turn items back on).
+    // search looks in the name and description, category is the category name like "Burgers"
+    public async Task<List<MenuItemResponse>> GetAllAsync(bool showHidden, string? search = null, string? category = null)
     {
-        var items = await db.MenuItems
-            .Include(m => m.Category)
-            .Where(m => showHidden || m.IsAvailable)
-            .OrderBy(m => m.Id)
-            .ToListAsync();
+        var query = Visible(showHidden);
+
+        if (!string.IsNullOrWhiteSpace(search))
+        {
+            var text = search.Trim().ToLower();
+            query = query.Where(m => m.Name.ToLower().Contains(text) || m.Description.ToLower().Contains(text));
+        }
+        if (!string.IsNullOrWhiteSpace(category))
+        {
+            var name = category.Trim().ToLower();
+            query = query.Where(m => m.Category.Name.ToLower() == name);
+        }
+
+        var items = await query.OrderBy(m => m.Id).ToListAsync();
         return items.Select(ToResponse).ToList();
     }
+
+    // one food item, null if it doesn't exist (or is hidden and you're not an admin)
+    public async Task<MenuItemResponse?> GetAsync(int id, bool showHidden)
+    {
+        var item = await Visible(showHidden).FirstOrDefaultAsync(m => m.Id == id);
+        return item is null ? null : ToResponse(item);
+    }
+
+    private IQueryable<MenuItem> Visible(bool showHidden) =>
+        db.MenuItems.Include(m => m.Category).Where(m => showHidden || m.IsAvailable);
 
     private static MenuItemResponse ToResponse(MenuItem m) => new(
         m.Id.ToString(), m.Name, m.Description, m.CategoryId.ToString(), m.Category.Name,

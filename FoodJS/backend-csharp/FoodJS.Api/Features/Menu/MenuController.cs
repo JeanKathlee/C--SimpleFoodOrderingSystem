@@ -9,9 +9,17 @@ namespace FoodJS.Api.Features.Menu;
 public sealed class MenuController(IMenuService menuService, MenuService menuDb) : ControllerBase
 {
     // anyone can see the menu. if an admin is logged in, hidden items are shown too
+    // search and filter: /api/menu?search=fries&category=Sides
     [HttpGet]
-    public async Task<ActionResult<List<MenuItemResponse>>> GetAll() =>
-        Ok(await menuDb.GetAllAsync(User.IsInRole(AuthService.AdminRole)));
+    public async Task<ActionResult<List<MenuItemResponse>>> GetAll(string? search, string? category) =>
+        Ok(await menuDb.GetAllAsync(User.IsInRole(AuthService.AdminRole), search, category));
+
+    [HttpGet("{id:int}")]
+    public async Task<ActionResult<MenuItemResponse>> Get(int id)
+    {
+        var item = await menuDb.GetAsync(id, User.IsInRole(AuthService.AdminRole));
+        return item is null ? NotFound(new { message = "Menu item not found." }) : Ok(item);
+    }
 
     [HttpPost]
     [Authorize(Roles = AuthService.AdminRole)]

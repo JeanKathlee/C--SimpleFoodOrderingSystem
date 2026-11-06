@@ -37,7 +37,8 @@ GET http://localhost:3001/api/health
 
 The Menu feature is the example to copy. The menu list (`GET /api/menu`) now comes
 from the database (`Features/Menu/MenuService.cs`). Customers only see available
-items; a logged-in admin sees hidden ones too. On the first run the old Node menu in
+items; a logged-in admin sees hidden ones too. Search and category filter are done
+here too: `GET /api/menu?search=fries&category=Sides`. One item: `GET /api/menu/{id}`. On the first run the old Node menu in
 `Data/Seed/*.json` is copied into the database. Add, edit and delete still use the
 in-memory example until they are moved over.
 

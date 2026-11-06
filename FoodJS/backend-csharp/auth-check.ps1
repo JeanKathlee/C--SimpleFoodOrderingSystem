@@ -38,6 +38,12 @@ Check "menu list has seeded food" (@($menu.Body).Count -ge 8) $true
 Check "menu item has category name" (@($menu.Body)[0].category) "Burgers"
 Check "customer menu has only available items" (@($menu.Body | Where-Object { -not $_.isAvailable }).Count) 0
 Check "admin menu list" (Call GET /menu $null $admin.Body.token).Status 200
+Check "view one food item" (Call "GET" "/menu/$(@($menu.Body)[0].id)").Body.name (@($menu.Body)[0].name)
+Check "view missing food item" (Call GET /menu/999999).Status 404
+Check "search fries (any case)" (@((Call GET "/menu?search=FRIES").Body).Count) 2
+Check "search finds description" (@((Call GET "/menu?search=sauce").Body).Count) 2
+Check "filter by category" (@((Call GET "/menu?category=Drinks").Body | Where-Object category -ne "Drinks").Count) 0
+Check "search + filter" (@((Call GET "/menu?category=Drinks&search=mango").Body).Count) 1
 $noToken = Call POST /menu $menuItem
 Check "no token" $noToken.Status 401
 Check "no token message" $noToken.Body.message "Unauthorized. Token required."

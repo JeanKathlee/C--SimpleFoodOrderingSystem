@@ -1,18 +1,17 @@
 import { useState, useEffect } from "react";
-import { useLocation, useNavigate, useParams } from "react-router-dom";
-import { fetchMenuFromBackend, enrichMenuWithImages, formatPrice } from "../data/menuItems";
+import { useNavigate, useParams } from "react-router-dom";
+import { fetchMenuItem, enrichMenuWithImages, formatPrice } from "../data/menuItems";
 import { getAuthSession } from "../lib/auth";
 import { useNotification } from "../hooks/useNotification";
 
 export default function ProductDetails() {
   const navigate = useNavigate();
   const { success, error: errorNotif } = useNotification();
-  const location = useLocation();
-  const { name } = useParams();
-  const [item, setItem] = useState(location.state?.item || null);
+  const { id } = useParams();
+  const [item, setItem] = useState(null);
   const [quantity, setQuantity] = useState(1);
   const [choice, setChoice] = useState("Go Regular Iced Tea");
-  const [loading, setLoading] = useState(!item);
+  const [loading, setLoading] = useState(true);
   const [showFirstAddPopup, setShowFirstAddPopup] = useState(false);
   const [addedItemName, setAddedItemName] = useState("");
 
@@ -22,27 +21,16 @@ export default function ProductDetails() {
     { label: "Go Regular Iced Tea", addOn: 0 },
   ];
 
+  // load the food item from the C# backend (/api/menu/{id})
   useEffect(() => {
-    if (item || !name) return;
-
-    const loadItem = async () => {
-      try {
-        const items = await fetchMenuFromBackend();
-        const enhanced = enrichMenuWithImages(items);
-        const decodedName = decodeURIComponent(name);
-        const found = enhanced.find((i) => i.name === decodedName);
-        setItem(found || null);
-      } catch (err) {
-        console.error("Failed to load product:", err);
-      } finally {
-        setLoading(false);
-      }
-    };
-
-    loadItem();
-  }, [name, item]);
+    fetchMenuItem(id).then((found) => {
+      setItem(found ? enrichMenuWithImages([found])[0] : null);
+      setLoading(false);
+    });
+  }, [id]);
 
   if (!item) {
+    if (loading) return null;
     return (
       <div className="client-page product-page">
         <div className="client-shell">

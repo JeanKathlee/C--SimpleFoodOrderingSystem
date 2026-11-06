@@ -1,5 +1,5 @@
 // middleman between frontend components and the backend API.
-export { fetchMenuFromBackend, getCategoriesFromMenu, filterMenuByCategory, getMenuItemById, formatPrice, enrichMenuWithImages } from "../lib/menuApi";
+export { fetchMenuFromBackend, fetchMenuItem, getCategoriesFromMenu, getMenuItemById, formatPrice, enrichMenuWithImages } from "../lib/menuApi";
 
 export const tabs = ["All", "Burgers", "Sides", "Drinks", "Desserts"];
 

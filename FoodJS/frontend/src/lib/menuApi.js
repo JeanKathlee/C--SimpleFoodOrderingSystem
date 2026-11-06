@@ -3,10 +3,13 @@ const sidesImg = "https://images.unsplash.com/photo-1680016791602-3a160533b0a8?q
 const drinksImg = "https://images.unsplash.com/photo-1500217052183-bc01eee1a74e?q=80&w=688&auto=format&fit=crop&w=500&q=60";
 const dessertsImg = "https://images.unsplash.com/photo-1495147466023-ac5c588e2e94?q=80&w=687&auto=format&fit=crop&w=500&q=60";
 
-// Fetch menu items gikan backend API
-export async function fetchMenuFromBackend() {
+// Fetch menu items gikan backend API. search and category are done by the C# backend
+export async function fetchMenuFromBackend({ search = "", category = "" } = {}) {
   try {
-    const response = await fetch("/api/menu");
+    const params = new URLSearchParams();
+    if (search.trim()) params.set("search", search.trim());
+    if (category && category !== "All") params.set("category", category);
+    const response = await fetch(`/api/menu${params.size ? `?${params}` : ""}`);
     if (!response.ok) {
       throw new Error(`Menu API error: ${response.status}`);
     }
@@ -34,11 +37,15 @@ export function getCategoriesFromMenu(menuItems) {
 
 // Filter menu items by category
 
-export function filterMenuByCategory(menuItems, category) {
-  if (category === "All") {
-    return menuItems;
+// one food item from the C# backend, null if not found
+export async function fetchMenuItem(id) {
+  try {
+    const response = await fetch(`/api/menu/${encodeURIComponent(id)}`);
+    return response.ok ? await response.json() : null;
+  } catch (error) {
+    console.error("Failed to fetch menu item:", error);
+    return null;
   }
-  return menuItems.filter((item) => item.category === category);
 }
 
 // Find menu item gamit ID

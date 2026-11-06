@@ -5,7 +5,6 @@ import { clearAuthSession, getAuthSession } from "../lib/auth";
 import {
   fetchMenuFromBackend,
   getCategoriesFromMenu,
-  filterMenuByCategory,
   enrichMenuWithImages,
   formatPrice,
 } from "../data/menuItems";
@@ -14,7 +13,6 @@ import { useNotification } from "../hooks/useNotification";
 export default function Menu() {
   const navigate = useNavigate();
   const { success, error: errorNotif } = useNotification();
-  const [menuItems, setMenuItems] = useState([]);
   const [tabs, setTabs] = useState(["All"]);
   const [activeTab, setActiveTab] = useState("All");
   const [query, setQuery] = useState("");
@@ -28,13 +26,9 @@ export default function Menu() {
   useEffect(() => {
     const loadData = async () => {
       try {
-        // Load menu gikan backend
+        // Load menu gikan backend, only to make the category tabs
         const items = await fetchMenuFromBackend();
-        const enhancedItems = enrichMenuWithImages(items);
-        setMenuItems(enhancedItems);
-        
-        const categories = getCategoriesFromMenu(enhancedItems);
-        setTabs(categories);
+        setTabs(getCategoriesFromMenu(items));
 
         // Load cart gikan API
         const session = getAuthSession();
@@ -61,20 +55,18 @@ export default function Menu() {
     loadData();
   }, []);
 
-  const visibleItems = useMemo(() => {
-    const tabItems = filterMenuByCategory(menuItems, activeTab);
-
-    if (!query.trim()) {
-      return tabItems;
-    }
-
-    const keyword = query.toLowerCase();
-    return tabItems.filter(
-      (item) =>
-        item.name.toLowerCase().includes(keyword) ||
-        (item.description && item.description.toLowerCase().includes(keyword))
-    );
-  }, [activeTab, query, menuItems]);
+  // search and category filter are done by the C# backend (/api/menu?search=&category=)
+  const [visibleItems, setVisibleItems] = useState([]);
+  useEffect(() => {
+    let stale = false;
+    fetchMenuFromBackend({ search: query, category: activeTab }).then((items) => {
+      if (!stale) setVisibleItems(enrichMenuWithImages(items));
+    });
+    // ignore old answers if the user typed again before this one came back
+    return () => {
+      stale = true;
+    };
+  }, [activeTab, query]);
 
   const handleLogout = () => {
     setLogoutConfirm(true);
@@ -87,9 +79,7 @@ export default function Menu() {
   };
 
   const openProductDetails = (item) => {
-    navigate(`/product/${encodeURIComponent(item.name)}`, {
-      state: { item },
-    });
+    navigate(`/product/${item.id}`);
   };
 
   const adjustQuantity = async (menuItemId, newQuantity) => {
