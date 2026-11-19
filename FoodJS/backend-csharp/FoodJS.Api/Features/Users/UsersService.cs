@@ -116,6 +116,15 @@ public sealed class UsersService(FoodJsDbContext db, AuthService authService)
         return await authService.ToResponseAsync(user);
     }
 
+    // same as UpdateAsync but only for customers, returns null if not a customer
+    public async Task<AuthUserResponse?> UpdateCustomerAsync(int id, UpdateProfileRequest request)
+    {
+        var user = await FindAsync(id);
+        return user is null || user.Role.Name != AuthService.CustomerRole
+            ? null
+            : await UpdateAsync(id, request);
+    }
+
     // returns false if the user doesn't exist
     public async Task<bool> DeleteAsync(int id, int currentUserId)
     {

@@ -34,6 +34,15 @@ public sealed class UsersController(UsersService usersService) : ControllerBase
         return user is null ? NotFound(new { message = "User not found." }) : Ok(user);
     });
 
+    // admin edits a customer's profile from the Customers panel
+    [HttpPatch("{id:int}")]
+    [Authorize(Roles = AuthService.AdminRole)]
+    public Task<IActionResult> UpdateCustomer(int id, UpdateProfileRequest request) => SendErrorsBack(async () =>
+    {
+        var user = await usersService.UpdateCustomerAsync(id, request);
+        return user is null ? NotFound(new { message = "Customer not found." }) : Ok(user);
+    });
+
     [HttpDelete("{id:int}")]
     [Authorize(Roles = AuthService.AdminRole)]
     public Task<IActionResult> Delete(int id) => SendErrorsBack(async () =>

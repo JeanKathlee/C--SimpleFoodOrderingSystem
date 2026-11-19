@@ -3,6 +3,7 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 using FoodJS.Api.Features.Auth;
+using FoodJS.Api.Features.Coupons;
 using FoodJS.Api.Features.Menu;
 using FoodJS.Api.Features.Users;
 
@@ -45,6 +46,7 @@ builder.Services.AddCors(options =>
 // Each feature registers its own service here. Replace the in-memory example
 // with an Entity Framework Core implementation when persistence is added.
 builder.Services.AddSingleton<IMenuService, InMemoryMenuService>();
+builder.Services.AddScoped<ICouponService, CouponService>();
 
 // checks the login token on every request
 // to lock an endpoint add [Authorize], for admin only add [Authorize(Roles = AuthService.AdminRole)]
