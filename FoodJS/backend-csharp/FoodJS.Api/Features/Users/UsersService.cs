@@ -1,4 +1,5 @@
 using System.Net.Mail;
+using FoodJS.Api.Common;
 using FoodJS.Api.Data;
 using FoodJS.Api.Features.Auth;
 using FoodJS.Api.Models;
@@ -105,6 +106,10 @@ public sealed class UsersService(FoodJsDbContext db, AuthService authService)
         }
         if (request.ProfileImage is not null)
         {
+            if (ImageRules.Check(request.ProfileImage) is { } imageError)
+            {
+                throw new BadHttpRequestException(imageError);
+            }
             user.ProfileImage = request.ProfileImage.Trim();
         }
         if (request.Address is not null)

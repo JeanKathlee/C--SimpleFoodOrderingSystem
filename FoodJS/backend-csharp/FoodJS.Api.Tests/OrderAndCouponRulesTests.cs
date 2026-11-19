@@ -131,3 +131,33 @@ public class PublicIdTests
         Assert.Equal("cat-3", PublicId.Category(3));
     }
 }
+
+public class ImageRulesTests
+{
+    private static string DataUrl(string type, params byte[] bytes) => $"data:image/{type};base64,{Convert.ToBase64String(bytes)}";
+
+    [Fact]
+    public void Real_images_links_and_empty_are_allowed()
+    {
+        Assert.Null(ImageRules.Check(null));
+        Assert.Null(ImageRules.Check(""));
+        Assert.Null(ImageRules.Check("https://images.unsplash.com/photo.jpg"));
+        Assert.Null(ImageRules.Check(DataUrl("png", 0x89, 0x50, 0x4E, 0x47, 1, 2)));
+        Assert.Null(ImageRules.Check(DataUrl("jpeg", 0xFF, 0xD8, 0xFF, 0xE0)));
+        Assert.Null(ImageRules.Check(DataUrl("webp", 0x52, 0x49, 0x46, 0x46, 0, 0, 0, 0, 0x57, 0x45, 0x42, 0x50)));
+    }
+
+    [Fact]
+    public void Wrong_types_fakes_and_big_files_are_refused()
+    {
+        Assert.Equal(ImageRules.TypeError, ImageRules.Check("data:image/svg+xml;base64,PHN2Zz4="));
+        Assert.Equal(ImageRules.TypeError, ImageRules.Check("data:application/pdf;base64,JVBERg=="));
+        Assert.Equal(ImageRules.TypeError, ImageRules.Check("javascript:alert(1)"));
+        Assert.Equal(ImageRules.TypeError, ImageRules.Check("file:///C:/secret.png"));
+        Assert.Equal(ImageRules.TypeError, ImageRules.Check(DataUrl("png", 0x25, 0x50, 0x44, 0x46)));
+        Assert.Equal(ImageRules.TypeError, ImageRules.Check("data:image/png;base64,not-base64!!"));
+        var big = new byte[ImageRules.MaxBytes + 1];
+        big[0] = 0x89; big[1] = 0x50; big[2] = 0x4E; big[3] = 0x47;
+        Assert.Equal(ImageRules.SizeError, ImageRules.Check(DataUrl("png", big)));
+    }
+}

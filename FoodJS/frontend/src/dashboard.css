@@ -760,3 +760,9 @@
     grid-template-columns: 1fr;
   }
 }
+
+.admin-field-error {
+  color: #9f2d2a;
+  font-size: 13px;
+  font-weight: 600;
+}

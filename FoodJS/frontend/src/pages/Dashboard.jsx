@@ -160,19 +160,17 @@ export default function Dashboard() {
 
   const loadAdminData = async () => {
     try {
-      const [categoriesResponse, menuResponse, ordersResponse, insightsResponse, couponsResponse] =
+      const [categoriesResponse, menuResponse, insightsResponse, couponsResponse] =
         await Promise.all([
           fetch("/api/categories"),
           fetch("/api/menu"),
-          fetch("/api/orders"),
-          fetch("/api/admin-insights"),
+          fetch("/api/admin-insights", { headers: { Authorization: `Bearer ${session?.token || ""}` } }),
           fetch("/api/coupons"),
         ]);
 
-      const [categoryData, menuData, , insightData, couponData] = await Promise.all([
+      const [categoryData, menuData, insightData, couponData] = await Promise.all([
         categoriesResponse.json(),
         menuResponse.json(),
-        ordersResponse.json(),
         insightsResponse.json(),
         couponsResponse.json(),
       ]);

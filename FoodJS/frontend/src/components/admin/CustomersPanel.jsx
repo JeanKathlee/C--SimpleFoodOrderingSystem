@@ -19,6 +19,8 @@ function formatCurrency(value) {
 }
 
 import { useEffect, useState } from "react";
+import Pagination from "../Pagination";
+import usePagination from "../../hooks/usePagination";
 
 export default function CustomersPanel({
   customers,
@@ -35,6 +37,16 @@ export default function CustomersPanel({
     ? orders.filter((order) => String(order.userId) === String(selectedCustomer.id))
     : [];
   const totalSpent = selectedOrders.reduce((total, order) => total + order.total, 0);
+  const customerPager = usePagination(customers, 10);
+  const orderPager = usePagination(selectedOrders, 5, selectedCustomer?.id ?? "");
+
+  // Esc closes the profile, like clicking the backdrop
+  useEffect(() => {
+    if (!selectedCustomer) return undefined;
+    const handleKey = (event) => event.key === "Escape" && onClose();
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [selectedCustomer, onClose]);
 
   useEffect(() => {
     setEditing(false);
@@ -90,7 +102,7 @@ export default function CustomersPanel({
                   <td colSpan="5" className="admin-empty-cell">No customers found.</td>
                 </tr>
               ) : (
-                customers.map((customer) => (
+                customerPager.pageItems.map((customer) => (
                   <tr key={customer.id}>
                     <td>{customer.name || `${customer.firstName} ${customer.lastName}`}</td>
                     <td>{customer.email}</td>
@@ -101,6 +113,7 @@ export default function CustomersPanel({
                         type="button"
                         className="admin-btn admin-btn-primary admin-table-action"
                         onClick={() => onViewCustomer(customer)}
+                        aria-label={`View profile of ${customer.name || `${customer.firstName} ${customer.lastName}`}`}
                       >
                         View Profile
                       </button>
@@ -111,6 +124,7 @@ export default function CustomersPanel({
             </tbody>
           </table>
         </div>
+        <Pagination pager={customerPager} buttonClass="admin-btn admin-btn-light" label="customers" />
       </section>
 
       {selectedCustomer && (
@@ -186,7 +200,7 @@ export default function CustomersPanel({
                         <tr><th>Order ID</th><th>Status</th><th>Total</th><th>Created</th></tr>
                       </thead>
                       <tbody>
-                        {selectedOrders.map((order) => (
+                        {orderPager.pageItems.map((order) => (
                           <tr key={order.id}>
                             <td>{order.id}</td>
                             <td><span className={`admin-status ${order.status.toLowerCase()}`}>{order.status}</span></td>
@@ -196,6 +210,7 @@ export default function CustomersPanel({
                         ))}
                       </tbody>
                     </table>
+                    <Pagination pager={orderPager} buttonClass="admin-btn admin-btn-light" label="orders" />
                   </div>
                 )}
               </>

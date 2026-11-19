@@ -329,11 +329,11 @@ export default function Menu() {
                           <p>{formatPrice(item.price * item.quantity)}</p>
                         </div>
                         <div className="menu-bag-actions">
-                          <button type="button" onClick={() => adjustQuantity(item.menuItemId, item.quantity - 1)}>
+                          <button type="button" aria-label={`Decrease ${item.name} quantity`} onClick={() => adjustQuantity(item.menuItemId, item.quantity - 1)}>
                             −
                           </button>
                           <span>{item.quantity}</span>
-                          <button type="button" onClick={() => adjustQuantity(item.menuItemId, item.quantity + 1)}>
+                          <button type="button" aria-label={`Increase ${item.name} quantity`} onClick={() => adjustQuantity(item.menuItemId, item.quantity + 1)}>
                             +
                           </button>
                           <button type="button" className="remove" onClick={() => removeFromCart(item.menuItemId)}>

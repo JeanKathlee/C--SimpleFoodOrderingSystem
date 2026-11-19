@@ -69,6 +69,9 @@ namespace FoodJS.Api.Migrations
                     b.Property<int>("Quantity")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("SelectedChoice")
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("ShoppingCartId")
                         .HasColumnType("INTEGER");
 

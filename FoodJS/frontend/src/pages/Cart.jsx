@@ -157,11 +157,11 @@ export default function Cart() {
 
                   <div className="cart-item-controls">
                     <div className="qty-control">
-                      <button type="button" onClick={() => adjustQuantity(item.menuItemId, item.quantity - 1)}>
+                      <button type="button" aria-label={`Decrease ${item.name} quantity`} onClick={() => adjustQuantity(item.menuItemId, item.quantity - 1)}>
                         −
                       </button>
                       <span>{item.quantity}</span>
-                      <button type="button" onClick={() => adjustQuantity(item.menuItemId, item.quantity + 1)}>
+                      <button type="button" aria-label={`Increase ${item.name} quantity`} onClick={() => adjustQuantity(item.menuItemId, item.quantity + 1)}>
                         +
                       </button>
                     </div>

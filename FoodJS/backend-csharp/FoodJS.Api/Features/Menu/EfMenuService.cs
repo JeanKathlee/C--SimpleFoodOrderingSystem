@@ -161,6 +161,11 @@ public sealed class EfMenuService(FoodJsDbContext db) : IMenuService
                 $"Description must be {MaxDescriptionLength} characters or fewer.");
         }
 
+        if (ImageRules.Check(request.Image) is { } imageError)
+        {
+            throw new ApiException(StatusCodes.Status400BadRequest, imageError);
+        }
+
         return new ValidatedInput(name, request.CategoryId.Trim(), request.Price.Value, request.PrepTime.Value);
     }
 

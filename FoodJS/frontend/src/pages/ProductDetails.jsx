@@ -182,11 +182,11 @@ export default function ProductDetails() {
 
             <div className="product-action-row">
               <div className="product-qty-row">
-                <button type="button" onClick={() => setQuantity((q) => Math.max(1, q - 1))}>
+                <button type="button" aria-label="Decrease quantity" onClick={() => setQuantity((q) => Math.max(1, q - 1))}>
                   −
                 </button>
                 <span>{quantity}</span>
-                <button type="button" onClick={() => setQuantity((q) => q + 1)}>
+                <button type="button" aria-label="Increase quantity" onClick={() => setQuantity((q) => q + 1)}>
                   +
                 </button>
               </div>
