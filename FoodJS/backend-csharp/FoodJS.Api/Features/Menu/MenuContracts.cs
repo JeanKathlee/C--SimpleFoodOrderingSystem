@@ -1,7 +1,6 @@
-using System.ComponentModel.DataAnnotations;
-
 namespace FoodJS.Api.Features.Menu;
 
+// The shape of a menu item in the API response.
 public sealed record MenuItemResponse(
     string Id,
     string Name,
@@ -16,24 +15,27 @@ public sealed record MenuItemResponse(
     DateTimeOffset CreatedAt,
     DateTimeOffset UpdatedAt);
 
+// The shape of the request body for creating or updating a menu item. All fields are optional to allow partial updates.
 public sealed class SaveMenuItemRequest
 {
-    [Required, StringLength(120)]
-    public required string Name { get; init; }
+    public string? Name { get; init; }
 
-    [Required, StringLength(50)]
-    public required string CategoryId { get; init; }
+    public string? CategoryId { get; init; }
 
-    [Range(0.01, 1_000_000)]
-    public decimal Price { get; init; }
+    public decimal? Price { get; init; }
 
-    [Range(1, 1_440)]
-    public int PrepTime { get; init; }
+    public int? PrepTime { get; init; }
 
-    public bool IsAvailable { get; init; } = true;
+    // If null, the current availability is kept on update; if false, the item is marked unavailable; if true, the item is marked available.
+    public bool? IsAvailable { get; init; }
 
+    // If null, the current image is kept on update; if empty string, the image is removed; if non-empty string, the image is updated.
     public string? Image { get; init; }
 
-    [StringLength(2_000)]
-    public string Description { get; init; } = string.Empty;
+    public string? Description { get; init; }
+}
+
+public sealed class SetAvailabilityRequest
+{
+    public bool? IsAvailable { get; init; }
 }

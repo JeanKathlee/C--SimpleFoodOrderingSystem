@@ -39,8 +39,13 @@ The Menu feature is the example to copy. The menu list (`GET /api/menu`) now com
 from the database (`Features/Menu/MenuService.cs`). Customers only see available
 items; a logged-in admin sees hidden ones too. Search and category filter are done
 here too: `GET /api/menu?search=fries&category=Sides`. One item: `GET /api/menu/{id}`. On the first run the old Node menu in
-`Data/Seed/*.json` is copied into the database. Add, edit and delete still use the
-in-memory example until they are moved over.
+`Data/Seed/*.json` is copied into the database. Add, edit, change availability and
+delete (admin only) are in `Features/Menu/EfMenuService.cs`. Menu ids look like `M-1`
+and category ids like `cat-1` (`Common/PublicId.cs`).
+
+Other features already in C#: `Features/Coupons` (`/api/coupons`), `Features/Orders`
+(`/api/orders`), and `Features/Users` (including admin `PATCH /api/users/{id}` to edit a
+customer). Tests: `dotnet test FoodJS.Backend.slnx`.
 
 ## Suggested team ownership
 

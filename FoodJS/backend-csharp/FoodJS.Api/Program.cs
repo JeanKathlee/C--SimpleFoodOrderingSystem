@@ -1,11 +1,14 @@
+using FoodJS.Api.Common;
 using FoodJS.Api.Data;
-using Microsoft.AspNetCore.Authentication.JwtBearer;
-using Microsoft.EntityFrameworkCore;
-using System.Text.Json;
 using FoodJS.Api.Features.Auth;
 using FoodJS.Api.Features.Coupons;
 using FoodJS.Api.Features.Menu;
+using FoodJS.Api.Features.Orders;
 using FoodJS.Api.Features.Users;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Mvc;
+using Microsoft.EntityFrameworkCore;
+using System.Text.Json;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -21,11 +24,27 @@ builder.Services.AddDbContext<FoodJsDbContext>(options =>
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 
+// The Node API accepted JSON bodies up to 50 MB (menu images are sent as base64).
+builder.WebHost.ConfigureKestrel(options =>
+    options.Limits.MaxRequestBodySize = 50 * 1024 * 1024);
+
 builder.Services
-    .AddControllers()
+    .AddControllers(options => options.Filters.Add<ApiExceptionFilter>())
     .AddJsonOptions(options =>
     {
         options.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+    })
+    .ConfigureApiBehaviorOptions(options =>
+    {
+        // Node returned { "message": "..." } for bad input; keep that shape instead of ProblemDetails.
+        options.InvalidModelStateResponseFactory = context =>
+        {
+            var message = context.ModelState.Values
+                .SelectMany(entry => entry.Errors)
+                .Select(error => string.IsNullOrWhiteSpace(error.ErrorMessage) ? "Invalid request." : error.ErrorMessage)
+                .FirstOrDefault() ?? "Invalid request.";
+            return new BadRequestObjectResult(new { message });
+        };
     });
 
 builder.Services.AddProblemDetails();
@@ -43,9 +62,10 @@ builder.Services.AddCors(options =>
     });
 });
 
-// Each feature registers its own service here. Replace the in-memory example
-// with an Entity Framework Core implementation when persistence is added.
-builder.Services.AddSingleton<IMenuService, InMemoryMenuService>();
+// Each feature registers its own service here.
+builder.Services.AddScoped<IMenuService, EfMenuService>(); // menu add, edit, availability, delete
+builder.Services.AddScoped<MenuService>();                  // menu list, search, filter, details
+builder.Services.AddScoped<IOrderService, OrderService>();
 builder.Services.AddScoped<ICouponService, CouponService>();
 
 // checks the login token on every request
@@ -53,7 +73,6 @@ builder.Services.AddScoped<ICouponService, CouponService>();
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<UsersService>();
-builder.Services.AddScoped<MenuService>();
 builder.Services.AddAuthorization();
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -92,12 +111,19 @@ builder.Services
 
 var app = builder.Build();
 
-if (app.Environment.IsDevelopment())
+// Apply migrations and make sure the order status lookup rows exist.
+using (var scope = app.Services.CreateScope())
 {
-    using var scope = app.Services.CreateScope();
     var db = scope.ServiceProvider.GetRequiredService<FoodJsDbContext>();
-    await AuthService.SeedDevelopmentDataAsync(db);
-    await MenuService.SeedDevelopmentDataAsync(db, app.Environment.ContentRootPath);
+    await db.Database.MigrateAsync();
+    await OrderStatusSeeder.EnsureSeededAsync(db);
+
+    // demo accounts and the old node menu, only on your own machine
+    if (app.Environment.IsDevelopment())
+    {
+        await AuthService.SeedDevelopmentDataAsync(db);
+        await MenuService.SeedDevelopmentDataAsync(db, app.Environment.ContentRootPath);
+    }
 }
 
 app.UseExceptionHandler();

@@ -1,11 +1,12 @@
 using System.Text.Json;
+using FoodJS.Api.Common;
 using FoodJS.Api.Data;
 using FoodJS.Api.Models;
 using Microsoft.EntityFrameworkCore;
 
 namespace FoodJS.Api.Features.Menu;
 
-// menu items saved in the database. add, edit and delete still use InMemoryMenuService for now
+// reading menu items from the database. add, edit, availability and delete are in EfMenuService
 public sealed class MenuService(FoodJsDbContext db)
 {
     // customers only see items that are available, admins see everything (so they can turn items back on).
@@ -40,7 +41,7 @@ public sealed class MenuService(FoodJsDbContext db)
         db.MenuItems.Include(m => m.Category).Where(m => showHidden || m.IsAvailable);
 
     private static MenuItemResponse ToResponse(MenuItem m) => new(
-        m.Id.ToString(), m.Name, m.Description, m.CategoryId.ToString(), m.Category.Name,
+        PublicId.Menu(m.Id), m.Name, m.Description, PublicId.Category(m.CategoryId), m.Category.Name,
         m.Price, m.PrepTime, m.IsAvailable, m.SoldCount, m.Image, m.CreatedAt, m.UpdatedAt);
 
     // first run only: copies the old node menu (Data/Seed/*.json) into the database
