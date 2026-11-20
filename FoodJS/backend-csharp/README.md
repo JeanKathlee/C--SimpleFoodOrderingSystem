@@ -79,6 +79,31 @@ For legacy rows it copies the current profile name and mobile number once, since
 their original checkout values were never stored. Unrecoverable coupon codes
 remain null. New orders save their actual checkout values when created.
 
+## Verification of ARATIA's assigned features
+
+Run the regression suite from `FoodJS/`:
+
+```powershell
+dotnet test backend-csharp/FoodJS.Backend.slnx
+```
+
+`AssignedApiFlowTests` exercises the real application startup, migrations,
+controllers, JSON contracts, authorization policies, and services over an
+in-process HTTP test server with isolated SQLite storage.
+
+| Assignment | Automated coverage |
+| --- | --- |
+| Menu Management, WBS 21-25 | List, create, edit, availability, delete, description/image preservation, invalid inputs, and admin-only mutations. |
+| Checkout, WBS 38-42 | Order submission, server pricing, coupons, saved delivery addresses, and rejection of unavailable items. Existing SQLite tests also verify choice and contact snapshots. |
+| Order Management, WBS 44-50 | Customer/admin lists, details/tracking history, creation, status transitions, cancellation eligibility, ownership, and deletion with related records. |
+
+Test authentication is defined only inside the test project; users, roles,
+categories, and coupons are seeded as dependency data. This does not implement or
+verify teammate-owned authentication/profile/cart/category/coupon/notification APIs.
+Browser checkout summary/map behavior and full frontend-to-C# integration remain
+team acceptance checks once those APIs are available. The suite currently has 69
+passing cases; PR approval and merging remain with the project lead.
+
 ## Suggested team ownership
 
 - Lead: shared architecture, code review, configuration, deployment, and database

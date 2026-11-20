@@ -1,0 +1,323 @@
+using System.Net;
+using System.Net.Http.Json;
+using System.Text.Json;
+using FoodJS.Api.Common;
+using FoodJS.Api.Data;
+using FoodJS.Api.Features.Menu;
+using FoodJS.Api.Features.Orders;
+using FoodJS.Api.Models;
+using Microsoft.EntityFrameworkCore;
+using Microsoft.Extensions.DependencyInjection;
+using Xunit;
+
+namespace FoodJS.Api.Tests;
+
+public sealed class AssignedApiFlowTests : IAsyncLifetime
+{
+    private readonly AssignedApiFactory factory = new();
+    private HttpClient anonymous = null!;
+    private HttpClient admin = null!;
+    private HttpClient customer = null!;
+    private HttpClient otherCustomer = null!;
+    private int customerId;
+    private int categoryId;
+    private int menuId;
+
+    public async Task InitializeAsync()
+    {
+        anonymous = factory.CreateClient(); // Executes real startup migrations and status seeding.
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<FoodJsDbContext>();
+        var adminRole = new Role { Name = "admin" };
+        var customerRole = new Role { Name = "customer" };
+        var adminUser = User("Admin", adminRole);
+        var user = User("Customer", customerRole);
+        var other = User("Other", customerRole);
+        var category = new Category { Name = "Burgers" };
+        var menu = new MenuItem { Name = "Burger", Price = 100m, PrepTime = 10, Category = category };
+        db.AddRange(adminUser, user, other, menu, new Coupon
+        {
+            Code = "SAVE10", Discount = 10m, DiscountType = "percentage",
+            ExpiryDate = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1)
+        });
+        await db.SaveChangesAsync();
+        customerId = user.Id;
+        categoryId = category.Id;
+        menuId = menu.Id;
+        admin = ClientFor(adminUser.Id, "admin");
+        customer = ClientFor(user.Id, "customer");
+        otherCustomer = ClientFor(other.Id, "customer");
+    }
+
+    public async Task DisposeAsync()
+    {
+        anonymous.Dispose();
+        admin.Dispose();
+        customer.Dispose();
+        otherCustomer.Dispose();
+        await factory.DisposeAsync();
+    }
+
+    [Fact]
+    public async Task Menu_crud_preserves_description_and_image_and_supports_availability()
+    {
+        var created = await Read<MenuItemResponse>(await admin.PostAsJsonAsync("/api/menu", MenuRequest(
+            description: "Original description", image: "data:image/png;base64,AQID")), HttpStatusCode.Created);
+        Assert.Equal("Original description", created.Description);
+        Assert.Equal("data:image/png;base64,AQID", created.Image);
+        Assert.Equal("Burgers", created.Category);
+
+        // Editing price without resending optional fields must not erase them.
+        var updated = await Read<MenuItemResponse>(await admin.PutAsJsonAsync($"/api/menu/{created.Id}", MenuRequest(price: 125m)));
+        Assert.Equal(125m, updated.Price);
+        Assert.Equal(created.Description, updated.Description);
+        Assert.Equal(created.Image, updated.Image);
+
+        var hidden = await Read<MenuItemResponse>(await admin.PatchAsJsonAsync(
+            $"/api/menu/{created.Id}/availability", new { isAvailable = false }));
+        Assert.False(hidden.IsAvailable);
+        var loaded = (await Read<List<MenuItemResponse>>(await anonymous.GetAsync("/api/menu")))
+            .Single(item => item.Id == created.Id);
+        Assert.Equal(created.Description, loaded.Description);
+        Assert.Equal(created.Image, loaded.Image);
+        Assert.False(loaded.IsAvailable);
+
+        Assert.Equal(HttpStatusCode.OK, (await admin.DeleteAsync($"/api/menu/{created.Id}")).StatusCode);
+        Assert.DoesNotContain(await Read<List<MenuItemResponse>>(await anonymous.GetAsync("/api/menu")), item => item.Id == created.Id);
+    }
+
+    [Fact]
+    public async Task Menu_edit_without_availability_keeps_an_unavailable_item_hidden()
+    {
+        var id = PublicId.Menu(menuId);
+        await Read<MenuItemResponse>(await admin.PatchAsJsonAsync($"/api/menu/{id}/availability", new { isAvailable = false }));
+        var updated = await Read<MenuItemResponse>(await admin.PutAsJsonAsync($"/api/menu/{id}", MenuRequest(price: 120m)));
+        Assert.False(updated.IsAvailable);
+    }
+
+    [Theory]
+    [InlineData(0, "cat-1")]
+    [InlineData(-1, "cat-1")]
+    [InlineData(100, "cat-999999")]
+    public async Task Invalid_menu_input_returns_a_message_and_does_not_create_an_item(int price, string category)
+    {
+        await Error(await admin.PostAsJsonAsync("/api/menu", new
+        {
+            name = "Invalid burger", categoryId = category, price, prepTime = 10
+        }), HttpStatusCode.BadRequest);
+        Assert.Single(await Read<List<MenuItemResponse>>(await anonymous.GetAsync("/api/menu")));
+    }
+
+    [Fact]
+    public async Task Anonymous_and_customer_requests_cannot_use_admin_operations()
+    {
+        Assert.Equal(HttpStatusCode.OK, (await anonymous.GetAsync("/api/menu")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.PostAsJsonAsync("/api/menu", MenuRequest())).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync("/api/orders")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await customer.PostAsJsonAsync("/api/menu", MenuRequest())).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await customer.PutAsJsonAsync($"/api/menu/{PublicId.Menu(menuId)}", MenuRequest())).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await customer.DeleteAsync($"/api/menu/{PublicId.Menu(menuId)}")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await customer.PatchAsJsonAsync(
+            $"/api/menu/{PublicId.Menu(menuId)}/availability", new { isAvailable = false })).StatusCode);
+
+        var order = await CreateOrder();
+        Assert.Equal(HttpStatusCode.Forbidden, (await customer.GetAsync("/api/orders/admin/all")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await customer.PatchAsJsonAsync(
+            $"/api/orders/{order.Id}/status", new { status = "Preparing" })).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await customer.DeleteAsync($"/api/orders/{order.Id}")).StatusCode);
+    }
+
+    [Fact]
+    public async Task Checkout_and_order_lifecycle_round_trip_real_http_contracts()
+    {
+        var response = await customer.PostAsJsonAsync("/api/orders", new
+        {
+            customerName = "Delivery Recipient", mobileNumber = "09990000000",
+            address = "Pinned delivery address, Manila", note = "Call on arrival", paymentMethod = "cash",
+            couponCode = "SAVE10", discount = 9999,
+            items = new[] { new { menuItemId = PublicId.Menu(menuId), quantity = 2, selectedChoice = "Go Large Iced Tea", price = 0.01 } }
+        });
+        var order = await Read<OrderResponse>(response, HttpStatusCode.Created);
+        Assert.Equal(300m, order.Subtotal);
+        Assert.Equal(30m, order.Discount);
+        Assert.Equal(270m, order.Total);
+        Assert.Equal("Delivery Recipient", order.CustomerName);
+        Assert.Equal("09990000000", order.MobileNumber);
+        Assert.Equal("SAVE10", order.CouponCode);
+        Assert.Equal("Pinned delivery address, Manila", order.Address);
+        Assert.Equal("Call on arrival", order.Note);
+        Assert.Equal("cash", order.PaymentMethod);
+        Assert.Equal("Go Large Iced Tea", Assert.Single(order.Items).SelectedChoice);
+        Assert.Equal(150m, Assert.Single(order.Items).Price);
+        Assert.Equal("Pending", order.Status);
+        Assert.Equal("customer-create", Assert.Single(order.StatusHistory).Source);
+        Assert.Equal(order.Id, Assert.Single(await Read<List<OrderResponse>>(await customer.GetAsync("/api/orders"))).Id);
+        Assert.Equal(order.Id, Assert.Single(await Read<List<OrderResponse>>(await admin.GetAsync("/api/orders/admin/all"))).Id);
+
+        foreach (var status in new[] { "Preparing", "Ready", "Delivered" })
+        {
+            var changed = await Read<OrderResponse>(await admin.PatchAsJsonAsync(
+                $"/api/orders/{order.Id}/status", new { status }));
+            Assert.Equal(status, changed.Status);
+        }
+        // Retrying an already-applied status must not add duplicate history/notifications.
+        await Read<OrderResponse>(await admin.PatchAsJsonAsync($"/api/orders/{order.Id}/status", new { status = "Delivered" }));
+        var tracked = await Read<OrderResponse>(await customer.GetAsync($"/api/orders/{order.Id}"));
+        Assert.Equal(new[] { "Pending", "Preparing", "Ready", "Delivered" }, tracked.StatusHistory.Select(entry => entry.ToStatus));
+
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<FoodJsDbContext>();
+        Assert.Equal(270m, (await db.Payments.SingleAsync()).Amount);
+        Assert.Equal(1, (await db.Coupons.SingleAsync()).UsedCount);
+        Assert.Equal(4, await db.Notifications.CountAsync());
+    }
+
+    [Theory]
+    [InlineData("Pending")]
+    [InlineData("Preparing")]
+    public async Task Customer_can_cancel_only_their_eligible_order(string initialStatus)
+    {
+        var order = await CreateOrder();
+        if (initialStatus == "Preparing")
+            await Read<OrderResponse>(await admin.PatchAsJsonAsync($"/api/orders/{order.Id}/status", new { status = "Preparing" }));
+        var cancelled = await Read<OrderResponse>(await customer.PatchAsync($"/api/orders/{order.Id}/cancel", null));
+        Assert.Equal("Cancelled", cancelled.Status);
+        Assert.Equal("customer-cancel", cancelled.StatusHistory.Last().Source);
+        await Error(await customer.PatchAsync($"/api/orders/{order.Id}/cancel", null), HttpStatusCode.BadRequest);
+    }
+
+    [Theory]
+    [InlineData("Ready")]
+    [InlineData("Delivered")]
+    public async Task Kitchen_completed_orders_cannot_be_cancelled(string finalStatus)
+    {
+        var order = await CreateOrder();
+        foreach (var status in new[] { "Preparing", "Ready", "Delivered" })
+        {
+            await Read<OrderResponse>(await admin.PatchAsJsonAsync($"/api/orders/{order.Id}/status", new { status }));
+            if (status == finalStatus) break;
+        }
+        await Error(await customer.PatchAsync($"/api/orders/{order.Id}/cancel", null), HttpStatusCode.BadRequest);
+        Assert.Equal(finalStatus, (await Read<OrderResponse>(await customer.GetAsync($"/api/orders/{order.Id}"))).Status);
+    }
+
+    [Theory]
+    [InlineData("Ready")]
+    [InlineData("Shipped")]
+    public async Task Invalid_status_changes_return_a_message_and_leave_history_unchanged(string status)
+    {
+        var order = await CreateOrder();
+        await Error(await admin.PatchAsJsonAsync($"/api/orders/{order.Id}/status", new { status }), HttpStatusCode.BadRequest);
+        var unchanged = await Read<OrderResponse>(await customer.GetAsync($"/api/orders/{order.Id}"));
+        Assert.Equal("Pending", unchanged.Status);
+        Assert.Single(unchanged.StatusHistory);
+    }
+
+    [Fact]
+    public async Task Customers_cannot_read_or_cancel_another_customers_order()
+    {
+        var order = await CreateOrder();
+        await Error(await otherCustomer.GetAsync($"/api/orders/{order.Id}"), HttpStatusCode.NotFound);
+        await Error(await otherCustomer.PatchAsync($"/api/orders/{order.Id}/cancel", null), HttpStatusCode.NotFound);
+        Assert.Empty(await Read<List<OrderResponse>>(await otherCustomer.GetAsync("/api/orders")));
+    }
+
+    [Fact]
+    public async Task Admin_can_delete_an_order_without_breaking_foreign_keys()
+    {
+        var order = await CreateOrder();
+        Assert.Equal(HttpStatusCode.OK, (await admin.DeleteAsync($"/api/orders/{order.Id}")).StatusCode);
+        await Error(await customer.GetAsync($"/api/orders/{order.Id}"), HttpStatusCode.NotFound);
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<FoodJsDbContext>();
+        Assert.Empty(await db.Orders.ToListAsync());
+        Assert.Empty(await db.OrderItems.ToListAsync());
+        Assert.Empty(await db.Payments.ToListAsync());
+        Assert.Empty(await db.OrderStatusHistories.ToListAsync());
+        Assert.Null((await db.Notifications.SingleAsync()).OrderId);
+    }
+
+    [Fact]
+    public async Task Ordered_menu_items_cannot_be_deleted_and_past_order_lines_are_preserved()
+    {
+        var order = await CreateOrder();
+        await Error(await admin.DeleteAsync($"/api/menu/{PublicId.Menu(menuId)}"), HttpStatusCode.Conflict);
+        Assert.Single((await Read<OrderResponse>(await customer.GetAsync($"/api/orders/{order.Id}"))).Items);
+    }
+
+    [Fact]
+    public async Task Checkout_rejects_unavailable_items_without_saving_order_data()
+    {
+        await Read<MenuItemResponse>(await admin.PatchAsJsonAsync($"/api/menu/{PublicId.Menu(menuId)}/availability", new { isAvailable = false }));
+        await Error(await customer.PostAsJsonAsync("/api/orders", OrderRequest()), HttpStatusCode.BadRequest);
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<FoodJsDbContext>();
+        Assert.Empty(await db.Orders.ToListAsync());
+        Assert.Empty(await db.Payments.ToListAsync());
+        Assert.Empty(await db.Addresses.ToListAsync());
+    }
+
+    [Fact]
+    public async Task Delivery_address_is_saved_once_when_reused()
+    {
+        await CreateOrder();
+        await CreateOrder();
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<FoodJsDbContext>();
+        var address = await db.Addresses.SingleAsync();
+        Assert.Equal(customerId, address.UserId);
+        Assert.Equal("Delivery address, Manila", address.AddressLine1);
+        Assert.All(await db.Orders.ToListAsync(), order => Assert.Equal(address.Id, order.AddressId));
+    }
+
+    [Fact]
+    public async Task Checkout_missing_items_returns_the_expected_error_shape()
+    {
+        await Error(await customer.PostAsJsonAsync("/api/orders", new { customerName = "Recipient", items = Array.Empty<object>() }),
+            HttpStatusCode.BadRequest);
+    }
+
+    private HttpClient ClientFor(int id, string role)
+    {
+        var client = factory.CreateClient();
+        client.DefaultRequestHeaders.Add("X-Test-User", id.ToString());
+        client.DefaultRequestHeaders.Add("X-Test-Role", role);
+        return client;
+    }
+
+    private static User User(string name, Role role) => new()
+    {
+        FirstName = name, LastName = "Test", Email = $"{name}@example.invalid", PasswordHash = "unused", Role = role
+    };
+
+    private object MenuRequest(decimal price = 100m, string? description = null, string? image = null) => new
+    {
+        name = "New burger", categoryId = PublicId.Category(categoryId), price, prepTime = 10, description, image
+    };
+
+    private object OrderRequest() => new
+    {
+        customerName = "Recipient", mobileNumber = "09990000000", address = "Delivery address, Manila",
+        items = new[] { new { menuItemId = PublicId.Menu(menuId), quantity = 1 } }
+    };
+
+    private async Task<OrderResponse> CreateOrder() =>
+        await Read<OrderResponse>(await customer.PostAsJsonAsync("/api/orders", OrderRequest()), HttpStatusCode.Created);
+
+    private static async Task<T> Read<T>(HttpResponseMessage response, HttpStatusCode status = HttpStatusCode.OK)
+    {
+        using (response)
+        {
+            var json = await response.Content.ReadAsStringAsync();
+            Assert.True(response.StatusCode == status, $"Expected {status}, got {response.StatusCode}: {json}");
+            return JsonSerializer.Deserialize<T>(json, new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
+        }
+    }
+
+    private static async Task Error(HttpResponseMessage response, HttpStatusCode status)
+    {
+        var error = await Read<JsonElement>(response, status);
+        Assert.Equal(JsonValueKind.String, error.GetProperty("message").ValueKind);
+        Assert.False(string.IsNullOrWhiteSpace(error.GetProperty("message").GetString()));
+    }
+}

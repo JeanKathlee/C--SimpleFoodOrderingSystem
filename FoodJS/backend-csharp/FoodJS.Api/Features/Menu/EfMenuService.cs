@@ -67,7 +67,7 @@ public sealed class EfMenuService(FoodJsDbContext db) : IMenuService
         item.Description = request.Description ?? item.Description;
         item.Price = input.Price;
         item.PrepTime = input.PrepTime;
-        item.IsAvailable = request.IsAvailable != false;
+        item.IsAvailable = request.IsAvailable ?? item.IsAvailable;
         item.CategoryId = category.Id;
         item.Category = category;
         if (request.Image is not null)
