@@ -21,11 +21,33 @@ Or run the API directly:
 dotnet watch --project backend-csharp/FoodJS.Api/FoodJS.Api.csproj
 ```
 
-The API listens on `http://localhost:3001`. Verify it at:
+The API listens on `http://localhost:3002`. Verify it at:
 
 ```text
-GET http://localhost:3001/api/health
+GET http://localhost:3002/api/health
 ```
+
+## Local development bridge
+
+Run Express with `npm run dev:backend`, C# with `npm run dev:backend:csharp`,
+and React with `npm run dev:frontend` in separate terminals from `FoodJS/`.
+The frontend sends `/api/menu` and `/api/orders` requests to C# on port 3002;
+the remaining APIs use Express on port 3001. Checkout submission uses C# orders.
+
+The `migration` launch profile enables a Development-only dependency adapter
+using a separate `foodjs.migration.db`. It imports the initial menu once, maps
+reference categories to database IDs, refreshes coupon dependencies, and obtains
+the current user's identity/role from Express `GET /api/users/me`. It never
+grants an admin role from the browser's saved user object. Existing Express
+orders are not imported. The adapter is temporary; production authentication and
+the teammate-owned APIs still require integration.
+
+Menu reads are public; adding/editing/deleting requires a valid admin session.
+Express demo mode maps invalid or expired supplied tokens to its demo customer.
+The browser may still display a cached admin dashboard while C# correctly
+returns HTTP 403 for that customer. Sign out and sign in with the admin account
+to refresh the session. Permission failures return a JSON message; the menu UI
+also handles empty/non-JSON API errors without misreporting a connection failure.
 
 ## Project organization
 
@@ -113,7 +135,7 @@ Test authentication is defined only inside the test project; users, roles,
 categories, and coupons are seeded as dependency data. This does not implement or
 verify teammate-owned authentication/profile/cart/category/coupon/notification APIs.
 Browser checkout summary/map behavior and full frontend-to-C# integration remain
-team acceptance checks once those APIs are available. The suite currently has 78
+team acceptance checks once those APIs are available. The suite currently has 82
 passing cases; PR approval and merging remain with the project lead.
 
 ## Suggested team ownership

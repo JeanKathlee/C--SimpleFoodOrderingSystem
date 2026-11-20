@@ -25,6 +25,15 @@ const DEFAULT_WEEKLY_REVENUE = [
   { day: "Sun", amount: 0 },
 ];
 
+async function menuFailureMessage(response, fallback) {
+  const body = await response.json().catch(() => null);
+  if (typeof body?.message === "string" && body.message.trim()) return body.message;
+  if (response.status === 401) return "Your session is missing or has expired. Sign out and sign in again.";
+  if (response.status === 403) return "Administrator access is required. Sign out and sign in again using your admin account.";
+  if (response.status >= 500) return "The server could not complete this request. Please retry.";
+  return fallback;
+}
+
 function matchesDate(dateValue, fromDate, toDate) {
   const value = new Date(dateValue).getTime();
 
@@ -380,10 +389,7 @@ export default function Dashboard() {
         body: JSON.stringify(payload),
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-        return { ok: false, message: error?.message || "Failed to add menu item" };
-      }
+      if (!response.ok) return { ok: false, message: await menuFailureMessage(response, "Could not add the menu item. Please retry.") };
 
       const newItem = await response.json();
       setMenuItems((current) => [newItem, ...current]);
@@ -408,10 +414,7 @@ export default function Dashboard() {
         body: JSON.stringify(payload),
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-        return { ok: false, message: error?.message || "Failed to update menu item" };
-      }
+      if (!response.ok) return { ok: false, message: await menuFailureMessage(response, "Could not update the menu item. Please retry.") };
 
       const updatedItem = await response.json();
       setMenuItems((current) =>
@@ -443,10 +446,7 @@ export default function Dashboard() {
             },
           });
 
-          if (!response.ok) {
-            const error = await response.json();
-            throw new Error(error?.message || "Failed to delete menu item");
-          }
+          if (!response.ok) throw new Error(await menuFailureMessage(response, "Could not delete the menu item. Please retry."));
 
           setMenuItems((current) => current.filter((item) => item.id !== id));
           setModalConfig((current) => ({ ...current, open: false }));
@@ -467,8 +467,8 @@ export default function Dashboard() {
         method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.token}` },
         body: JSON.stringify({ isAvailable }),
       });
+      if (!response.ok) return { ok: false, message: await menuFailureMessage(response, "Could not update availability. Please retry.") };
       const data = await response.json();
-      if (!response.ok) return { ok: false, message: data.message || "Could not update availability." };
       setMenuItems(current => current.map(item => item.id === id ? data : item));
       setMenuRevision(value => value + 1);
       success(isAvailable ? "Item is now available." : "Item marked unavailable.");

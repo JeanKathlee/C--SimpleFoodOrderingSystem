@@ -43,4 +43,12 @@ public sealed class MigrationAuthenticationHandler(
             ? "The local migration bridge cannot reach Express on port 3001. Start npm run dev:backend."
             : "Your session is required. Please log in again." });
     }
+
+    protected override Task HandleForbiddenAsync(AuthenticationProperties properties)
+    {
+        Response.StatusCode = StatusCodes.Status403Forbidden;
+        return Response.WriteAsJsonAsync(new {
+            message = "Administrator access is required. Sign out and sign in again using your admin account."
+        });
+    }
 }

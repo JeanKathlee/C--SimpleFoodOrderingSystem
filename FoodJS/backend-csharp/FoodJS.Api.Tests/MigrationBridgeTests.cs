@@ -38,7 +38,10 @@ public sealed class MigrationBridgeTests
         var saved = await created.Content.ReadFromJsonAsync<MenuItemResponse>();
         using var customer = factory.CreateClient();
         customer.DefaultRequestHeaders.Authorization = new("Bearer", "customer-session");
-        Assert.Equal(HttpStatusCode.Forbidden, (await customer.DeleteAsync($"/api/menu/{saved!.Id}")).StatusCode);
+        var forbidden = await customer.DeleteAsync($"/api/menu/{saved!.Id}");
+        Assert.Equal(HttpStatusCode.Forbidden, forbidden.StatusCode);
+        var denial = await forbidden.Content.ReadFromJsonAsync<JsonElement>();
+        Assert.Contains("Administrator access", denial.GetProperty("message").GetString());
         var submitted = await customer.PostAsJsonAsync("/api/orders", new {
             customerName = "Checkout snapshot", mobileNumber = "09171234567", address = "Local test delivery",
             items = new[] { new { menuItemId = saved.Id, quantity = 2, price = 1 } }, couponCode = "SAVE10"
