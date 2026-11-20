@@ -254,7 +254,16 @@ namespace FoodJS.Api.Migrations
                     b.Property<bool>("Archived")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("CouponCode")
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CustomerName")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("MobileNumber")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Notes")

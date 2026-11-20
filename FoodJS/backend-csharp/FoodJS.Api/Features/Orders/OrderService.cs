@@ -104,12 +104,16 @@ public sealed class OrderService(FoodJsDbContext db) : IOrderService
 
         var pendingStatus = await GetStatusRowAsync(OrderStatusRules.Pending, ct);
         var now = DateTimeOffset.UtcNow;
+        var mobile = request.MobileNumber?.Trim() ?? string.Empty;
 
         await using var transaction = await db.Database.BeginTransactionAsync(ct);
 
         var order = new Order
         {
             UserId = userId,
+            CustomerName = customerName,
+            MobileNumber = mobile,
+            CouponCode = coupon?.Code,
             Address = address,
             OrderStatusId = pendingStatus.Id,
             TotalAmount = total,
@@ -161,7 +165,6 @@ public sealed class OrderService(FoodJsDbContext db) : IOrderService
         }
 
         // Remember the contact number the first time a customer orders without one on file.
-        var mobile = request.MobileNumber?.Trim();
         if (!string.IsNullOrEmpty(mobile) && string.IsNullOrWhiteSpace(user.MobileNumber))
         {
             user.MobileNumber = mobile;
@@ -394,7 +397,6 @@ public sealed class OrderService(FoodJsDbContext db) : IOrderService
     {
         var orders = await query
             .AsNoTracking()
-            .Include(order => order.User)
             .Include(order => order.OrderStatus)
             .Include(order => order.Address)
             .ToListAsync(ct);
@@ -434,7 +436,7 @@ public sealed class OrderService(FoodJsDbContext db) : IOrderService
         return new OrderResponse(
             PublicId.Order(order.Id),
             order.UserId,
-            $"{order.User.FirstName} {order.User.LastName}".Trim(),
+            order.CustomerName ?? string.Empty,
             items.Select(line => new OrderItemResponse(
                 PublicId.Menu(line.MenuItemId), line.ItemName, line.Quantity, line.SnapshotPrice,
                 line.SelectedChoice)).ToList(),
@@ -442,11 +444,11 @@ public sealed class OrderService(FoodJsDbContext db) : IOrderService
             subtotal,
             Math.Max(0m, subtotal - order.TotalAmount),
             order.TotalAmount,
-            null,
+            order.CouponCode,
             payment?.PaymentMethod ?? DefaultPaymentMethod,
             order.Address?.AddressLine1 ?? string.Empty,
             order.Notes ?? string.Empty,
-            order.User.MobileNumber ?? string.Empty,
+            order.MobileNumber ?? string.Empty,
             order.OrderStatus.Name,
             history.Select(entry => new OrderStatusHistoryResponse(
                 string.IsNullOrEmpty(entry.FromStatus) ? null : entry.FromStatus,

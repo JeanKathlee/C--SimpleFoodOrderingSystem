@@ -66,6 +66,19 @@ Run the SQLite order/pricing regression tests with:
 dotnet test backend-csharp/FoodJS.Backend.slnx
 ```
 
+## Saved order checkout details
+
+Orders store the submitted customer name and mobile number, plus the validated
+coupon code. The existing `customerName`, `mobileNumber`, and `couponCode` response
+fields read those saved values for details, tracking, and customer/admin lists.
+Later profile edits or coupon renaming/deletion do not change historical orders.
+An omitted mobile number is stored as an empty string; no applied coupon is null.
+
+The `PreserveOrderCheckoutDetails` migration adds nullable columns to `Orders`.
+For legacy rows it copies the current profile name and mobile number once, since
+their original checkout values were never stored. Unrecoverable coupon codes
+remain null. New orders save their actual checkout values when created.
+
 ## Suggested team ownership
 
 - Lead: shared architecture, code review, configuration, deployment, and database

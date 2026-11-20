@@ -148,15 +148,16 @@ public sealed class OrderChoiceIntegrationTests : IAsyncLifetime
     [Fact]
     public async Task Migration_preserves_existing_order_lines_without_a_choice()
     {
-        // This test has no orders yet, so it is safe to roll back only the new columns.
-        var migrator = db.GetService<IMigrator>();
-        await migrator.MigrateAsync("20261028160625_InitialCreate");
         var order = new Order
         {
             UserId = userId, OrderStatusId = (await db.OrderStatuses.FirstAsync()).Id, TotalAmount = 100m
         };
         db.Orders.Add(order);
         await db.SaveChangesAsync();
+
+        // Preserve an existing order while recreating the schema before choice/snapshot columns.
+        var migrator = db.GetService<IMigrator>();
+        await migrator.MigrateAsync("20261028160625_InitialCreate");
         await db.Database.ExecuteSqlInterpolatedAsync($"""
             INSERT INTO OrderItems (OrderId, MenuItemId, ItemName, Quantity, SnapshotPrice, LineTotal)
             VALUES ({order.Id}, {menuId}, {"Burger"}, {1}, {100m}, {100m})
