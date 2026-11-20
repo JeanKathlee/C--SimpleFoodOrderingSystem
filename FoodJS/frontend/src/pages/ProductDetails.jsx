@@ -70,8 +70,6 @@ export default function ProductDetails() {
         },
         body: JSON.stringify({
           menuItemId: item.id,
-          name: item.name,
-          price: item.price + selectedChoice.addOn,
           quantity,
           selectedChoice: choice,
         }),

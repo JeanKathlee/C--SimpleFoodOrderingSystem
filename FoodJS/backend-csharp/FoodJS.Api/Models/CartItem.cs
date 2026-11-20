@@ -14,6 +14,8 @@ public class CartItem
 
     public int Quantity { get; set; } = 1;
 
+    public decimal UnitPrice { get; set; }
+
     // the meal option picked on the product page, e.g. "Go Large Iced Tea"
     public string? SelectedChoice { get; set; }
 }

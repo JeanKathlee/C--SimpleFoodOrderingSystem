@@ -48,19 +48,19 @@ public sealed class CartAndCategoryTests : IDisposable
     {
         var cartA = Cart(userId: 1);
         await cartA.Add(new AddCartItemRequest("M-1", 2, null), default);
-        await cartA.Add(new AddCartItemRequest("M-1", 3, "Go Large Iced Tea"), default);
+        await cartA.Add(new AddCartItemRequest("M-1", 3, null), default);
 
-        var items = await cartA.GetMine(default);
+        var items = Items(await cartA.GetMine(default));
         var item = Assert.Single(items);
         Assert.Equal(5, item.Quantity);
         Assert.Equal(100, item.Price);
-        Assert.Equal("Go Large Iced Tea", item.SelectedChoice);
+        Assert.Null(item.SelectedChoice);
 
         var cartB = Cart(userId: 2);
-        Assert.Empty(await cartB.GetMine(default));
-        Assert.IsType<NotFoundObjectResult>(await cartB.Remove("M-1", default));
+        Assert.Empty(Items(await cartB.GetMine(default)));
+        Assert.IsType<NotFoundObjectResult>(await cartB.Remove(item.Id, default));
         await cartB.Clear(default);
-        Assert.Single(await cartA.GetMine(default));
+        Assert.Single(Items(await cartA.GetMine(default)));
     }
 
     private CartController Cart(int userId) => new(db)
@@ -73,6 +73,9 @@ public sealed class CartAndCategoryTests : IDisposable
             }
         }
     };
+
+    private static List<CartItemResponse> Items(ActionResult<List<CartItemResponse>> result) =>
+        Assert.IsType<List<CartItemResponse>>(Assert.IsType<OkObjectResult>(result.Result).Value);
 
     public void Dispose()
     {

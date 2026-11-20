@@ -37,9 +37,9 @@ export default function Cart() {
     loadCart();
   }, [navigate]);
 
-  const adjustQuantity = async (menuItemId, newQuantity) => {
+  const adjustQuantity = async (cartItemId, newQuantity) => {
     if (newQuantity <= 0) {
-      await removeFromCart(menuItemId);
+      await removeFromCart(cartItemId);
       return;
     }
 
@@ -47,7 +47,7 @@ export default function Cart() {
       const session = getAuthSession();
       const token = session?.token;
 
-      const response = await fetch(`/api/cart/items/${menuItemId}`, {
+      const response = await fetch(`/api/cart/items/${cartItemId}`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -59,7 +59,7 @@ export default function Cart() {
       if (response.ok) {
         setCartItems((prev) =>
           prev.map((item) =>
-            item.menuItemId === menuItemId
+            (item.id ?? item.menuItemId) === cartItemId
               ? { ...item, quantity: newQuantity }
               : item
           )
@@ -70,19 +70,19 @@ export default function Cart() {
     }
   };
 
-  const removeFromCart = async (menuItemId) => {
+  const removeFromCart = async (cartItemId) => {
     try {
       const session = getAuthSession();
       const token = session?.token;
 
-      const response = await fetch(`/api/cart/items/${menuItemId}`, {
+      const response = await fetch(`/api/cart/items/${cartItemId}`, {
         method: "DELETE",
         headers: { Authorization: `Bearer ${token}` },
       });
 
       if (response.ok) {
         setCartItems((prev) =>
-          prev.filter((item) => item.menuItemId !== menuItemId)
+          prev.filter((item) => (item.id ?? item.menuItemId) !== cartItemId)
         );
       }
     } catch (err) {
@@ -149,19 +149,20 @@ export default function Cart() {
           <div className="cart-layout">
             <section className="panel-card cart-list">
               {cartItems.map((item) => (
-                <div key={item.menuItemId} className="cart-item">
+                <div key={item.id ?? `${item.menuItemId}-${item.selectedChoice || "default"}`} className="cart-item">
                   <div className="cart-item-info">
                     <h3>{item.name}</h3>
+                    {item.selectedChoice && <p>{item.selectedChoice}</p>}
                     <p>{formatPrice(item.price)} each</p>
                   </div>
 
                   <div className="cart-item-controls">
                     <div className="qty-control">
-                      <button type="button" aria-label={`Decrease ${item.name} quantity`} onClick={() => adjustQuantity(item.menuItemId, item.quantity - 1)}>
+                      <button type="button" aria-label={`Decrease ${item.name} quantity`} onClick={() => adjustQuantity(item.id ?? item.menuItemId, item.quantity - 1)}>
                         −
                       </button>
                       <span>{item.quantity}</span>
-                      <button type="button" aria-label={`Increase ${item.name} quantity`} onClick={() => adjustQuantity(item.menuItemId, item.quantity + 1)}>
+                      <button type="button" aria-label={`Increase ${item.name} quantity`} onClick={() => adjustQuantity(item.id ?? item.menuItemId, item.quantity + 1)}>
                         +
                       </button>
                     </div>
@@ -171,7 +172,7 @@ export default function Cart() {
                     <button
                       type="button"
                       className="client-btn danger ghost"
-                      onClick={() => removeFromCart(item.menuItemId)}
+                      onClick={() => removeFromCart(item.id ?? item.menuItemId)}
                     >
                       Remove
                     </button>

@@ -75,6 +75,9 @@ namespace FoodJS.Api.Migrations
                     b.Property<int>("ShoppingCartId")
                         .HasColumnType("INTEGER");
 
+                    b.Property<decimal>("UnitPrice")
+                        .HasColumnType("TEXT");
+
                     b.HasKey("Id");
 
                     b.HasIndex("MenuItemId");

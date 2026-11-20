@@ -1,4 +1,4 @@
 <Solution>
-  <Project Path="FoodJS.Api/FoodJS.Api.csproj" />
   <Project Path="FoodJS.Api.Tests/FoodJS.Api.Tests.csproj" />
+  <Project Path="FoodJS.Api/FoodJS.Api.csproj" />
 </Solution>
