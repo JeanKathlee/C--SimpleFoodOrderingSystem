@@ -2,6 +2,8 @@ namespace FoodJS.Api.Features.Orders;
 
 public interface IOrderService
 {
+    Task<OrderPageResponse> GetPageAsync(int? userId, OrderPageRequest request, CancellationToken ct = default);
+    Task<OrderResponse?> GetForAdminAsync(string publicId, CancellationToken ct = default);
     // Every order for a given user, newest first.
     Task<IReadOnlyList<OrderResponse>> ListForUserAsync(int userId, CancellationToken ct = default);
 
@@ -12,6 +14,7 @@ public interface IOrderService
     Task<OrderResponse?> GetForUserAsync(int userId, string publicId, CancellationToken ct = default);
 
     Task<OrderResponse> CreateAsync(int userId, CreateOrderRequest request, CancellationToken ct = default);
+    Task<CheckoutQuoteResponse> QuoteAsync(int userId, CreateOrderRequest request, CancellationToken ct = default);
 
     // Cancel the order for a given user. Null when the order does not exist or belongs to someone else.
     Task<OrderResponse?> CancelAsync(int userId, string publicId, CancellationToken ct = default);

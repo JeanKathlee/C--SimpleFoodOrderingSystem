@@ -8,6 +8,13 @@ public class Order
 
     public User User { get; set; } = null!;
 
+    // Checkout snapshots: later profile/coupon edits must not change order history.
+    public string? CustomerName { get; set; }
+
+    public string? MobileNumber { get; set; }
+
+    public string? CouponCode { get; set; }
+
     public int? AddressId { get; set; }
 
     public Address? Address { get; set; }

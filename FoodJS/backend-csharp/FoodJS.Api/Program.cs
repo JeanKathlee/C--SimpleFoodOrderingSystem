@@ -1,5 +1,6 @@
 using FoodJS.Api.Common;
 using FoodJS.Api.Data;
+using FoodJS.Api.Development;
 using FoodJS.Api.Features.Auth;
 using FoodJS.Api.Features.Coupons;
 using FoodJS.Api.Features.Menu;
@@ -9,11 +10,28 @@ using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
+using Microsoft.AspNetCore.Authentication;
 
 var builder = WebApplication.CreateBuilder(args);
+var migrationBridge = builder.Configuration.GetValue<bool>("MigrationBridge:Enabled");
+if (migrationBridge && !builder.Environment.IsDevelopment())
+    throw new InvalidOperationException("The migration bridge is restricted to Development.");
+builder.Services.AddAuthentication();
+builder.Services.AddAuthorization();
+builder.Services.AddDataProtection();
+if (migrationBridge)
+{
+    var referenceUrl = new Uri(builder.Configuration["MigrationBridge:ReferenceApiUrl"] ?? "http://localhost:3001/");
+    if (!referenceUrl.IsLoopback || referenceUrl.Scheme != "http" || referenceUrl.AbsolutePath != "/")
+        throw new InvalidOperationException("MigrationBridge:ReferenceApiUrl must be an HTTP loopback origin.");
+    builder.Services.AddHttpClient<MigrationDependencies>(client => { client.BaseAddress = referenceUrl; client.Timeout = TimeSpan.FromSeconds(10); })
+        .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+    builder.Services.AddAuthentication(MigrationAuthenticationHandler.SchemeName)
+        .AddScheme<AuthenticationSchemeOptions, MigrationAuthenticationHandler>(MigrationAuthenticationHandler.SchemeName, _ => { });
+}
 
 // secret key for login tokens, don't put real secrets in appsettings.json
-builder.Configuration["Jwt:Secret"] ??= builder.Environment.IsDevelopment()
+builder.Configuration["Jwt:Secret"] ??= builder.Environment.IsDevelopment() || builder.Environment.IsEnvironment("Testing")
     ? "dev-only-jwt-secret-change-me-0123456789"
     : throw new InvalidOperationException("Jwt:Secret is not configured.");
 
@@ -74,40 +92,43 @@ builder.Services.AddHttpClient();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<UsersService>();
 builder.Services.AddAuthorization();
-builder.Services
-    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-    .AddJwtBearer(options =>
-    {
-        options.MapInboundClaims = false;
-        options.TokenValidationParameters = new()
+if (!migrationBridge)
+{
+    builder.Services
+        .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+        .AddJwtBearer(options =>
         {
-            ValidateIssuer = false,
-            ValidateAudience = false,
-            IssuerSigningKey = AuthService.SigningKey(builder.Configuration),
-            NameClaimType = "email",
-            RoleClaimType = "role",
-        };
-        // same error messages as the old node api
-        options.Events = new()
-        {
-            OnChallenge = context =>
+            options.MapInboundClaims = false;
+            options.TokenValidationParameters = new()
             {
-                context.HandleResponse();
-                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                return context.Response.WriteAsJsonAsync(new
+                ValidateIssuer = false,
+                ValidateAudience = false,
+                IssuerSigningKey = AuthService.SigningKey(builder.Configuration),
+                NameClaimType = "email",
+                RoleClaimType = "role",
+            };
+            // same error messages as the old node api
+            options.Events = new()
+            {
+                OnChallenge = context =>
                 {
-                    message = context.AuthenticateFailure is null
-                        ? "Unauthorized. Token required."
-                        : "Unauthorized. Invalid token."
-                });
-            },
-            OnForbidden = context =>
-            {
-                context.Response.StatusCode = StatusCodes.Status403Forbidden;
-                return context.Response.WriteAsJsonAsync(new { message = "Forbidden. Admin access required." });
-            },
-        };
-    });
+                    context.HandleResponse();
+                    context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                    return context.Response.WriteAsJsonAsync(new
+                    {
+                        message = context.AuthenticateFailure is null
+                            ? "Unauthorized. Token required."
+                            : "Unauthorized. Invalid token."
+                    });
+                },
+                OnForbidden = context =>
+                {
+                    context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                    return context.Response.WriteAsJsonAsync(new { message = "Forbidden. Admin access required." });
+                },
+            };
+        });
+}
 
 var app = builder.Build();
 
@@ -117,19 +138,34 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<FoodJsDbContext>();
     await db.Database.MigrateAsync();
     await OrderStatusSeeder.EnsureSeededAsync(db);
-
     // demo accounts and the old node menu, only on your own machine
-    if (app.Environment.IsDevelopment())
+    if (app.Environment.IsDevelopment() && !migrationBridge)
     {
         await AuthService.SeedDevelopmentDataAsync(db);
         await MenuService.SeedDevelopmentDataAsync(db, app.Environment.ContentRootPath);
     }
+
+    if (migrationBridge)
+        await scope.ServiceProvider.GetRequiredService<MigrationDependencies>().InitializeAsync();
 }
 
 app.UseExceptionHandler();
 app.UseCors("Frontend");
 app.UseAuthentication();
 app.UseAuthorization();
+if (migrationBridge)
+{
+    app.Use(async (context, next) =>
+    {
+        if (context.Request.Method == "POST" && (context.Request.Path == "/api/orders" || context.Request.Path == "/api/orders/quote") && context.User.Identity?.IsAuthenticated == true)
+            await context.RequestServices.GetRequiredService<MigrationDependencies>().RefreshCouponsAsync(context.RequestAborted);
+        await next(context);
+    });
+    app.MapGet("/api/menu/dependencies/categories", async (MigrationDependencies dependencies, CancellationToken ct) =>
+        Results.Ok(await dependencies.CategoriesAsync(ct)));
+    app.Logger.LogWarning("Local migration bridge enabled: Menu/Orders use SQLite; identity and dependencies come from local Express. Do not deploy this profile.");
+}
+
 app.MapControllers();
 
 app.Run();

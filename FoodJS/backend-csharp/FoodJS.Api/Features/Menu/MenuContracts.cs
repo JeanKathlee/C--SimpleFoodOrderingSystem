@@ -1,4 +1,21 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace FoodJS.Api.Features.Menu;
+
+public sealed class MenuPageRequest
+{
+    [Range(1, int.MaxValue)]
+    public int Page { get; init; } = 1;
+    [Range(1, 50)]
+    public int PageSize { get; init; } = 10;
+    [StringLength(120)]
+    public string? Search { get; init; }
+    public string? CategoryId { get; init; }
+    public bool? IsAvailable { get; init; }
+}
+
+public sealed record MenuPageResponse(
+    IReadOnlyList<MenuItemResponse> Items, int TotalCount, int Page, int PageSize, int TotalPages);
 
 // The shape of a menu item in the API response.
 public sealed record MenuItemResponse(

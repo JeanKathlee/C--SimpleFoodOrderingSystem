@@ -9,6 +9,23 @@ namespace FoodJS.Api.Features.Orders;
 [Authorize]
 public sealed class OrdersController(IOrderService orderService) : ControllerBase
 {
+    [HttpGet("paged")]
+    public async Task<ActionResult<OrderPageResponse>> GetMinePage([FromQuery] OrderPageRequest request, CancellationToken ct) =>
+        Ok(await orderService.GetPageAsync(User.RequireUserId(), request, ct));
+
+    [HttpGet("admin/paged")]
+    [Authorize(Roles = AuthRoles.Admin)]
+    public async Task<ActionResult<OrderPageResponse>> GetAdminPage([FromQuery] OrderPageRequest request, CancellationToken ct) =>
+        Ok(await orderService.GetPageAsync(null, request, ct));
+
+    [HttpGet("admin/{id}")]
+    [Authorize(Roles = AuthRoles.Admin)]
+    public async Task<ActionResult<OrderResponse>> GetAdminDetails(string id, CancellationToken ct)
+    {
+        var order = await orderService.GetForAdminAsync(id, ct);
+        return order is null ? NotFoundResult() : Ok(order);
+    }
+
     // Orders of the logged-in customer, newest first.
     [HttpGet]
     public async Task<ActionResult<IReadOnlyList<OrderResponse>>> GetMine(CancellationToken ct) =>
@@ -33,6 +50,10 @@ public sealed class OrdersController(IOrderService orderService) : ControllerBas
         var order = await orderService.CreateAsync(User.RequireUserId(), request, ct);
         return StatusCode(StatusCodes.Status201Created, order);
     }
+
+    [HttpPost("quote")]
+    public async Task<ActionResult<CheckoutQuoteResponse>> Quote(CreateOrderRequest request, CancellationToken ct) =>
+        Ok(await orderService.QuoteAsync(User.RequireUserId(), request, ct));
 
     [HttpPatch("{id}/cancel")]
     public async Task<ActionResult<OrderResponse>> Cancel(string id, CancellationToken ct)

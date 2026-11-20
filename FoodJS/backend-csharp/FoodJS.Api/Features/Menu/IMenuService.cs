@@ -4,6 +4,8 @@ public interface IMenuService
 {
     Task<IReadOnlyList<MenuItemResponse>> GetAllAsync(CancellationToken ct = default);
 
+    Task<MenuPageResponse> GetPageAsync(MenuPageRequest request, CancellationToken ct = default);
+
     Task<MenuItemResponse> CreateAsync(SaveMenuItemRequest request, int? adminId, CancellationToken ct = default);
 
     /// <summary>Returns null when the item does not exist.</summary>

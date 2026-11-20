@@ -28,6 +28,11 @@ public sealed class MenuController(IMenuService menuService, MenuService menuDb)
         return item is null ? NotFoundResult() : Ok(item);
     }
 
+    // Existing GET /api/menu callers still receive an array.
+    [HttpGet("paged")]
+    public async Task<ActionResult<MenuPageResponse>> GetPage([FromQuery] MenuPageRequest request, CancellationToken ct) =>
+        Ok(await menuService.GetPageAsync(request, ct));
+
     [HttpPost]
     [Authorize(Roles = AuthRoles.Admin)]
     public async Task<ActionResult<MenuItemResponse>> Create(SaveMenuItemRequest request, CancellationToken ct)

@@ -1,34 +1,28 @@
-// buttonClass reuses the page's own buttons: "admin-btn admin-btn-light" or "client-btn"
-export default function Pagination({ pager, buttonClass, label = "items" }) {
-  if (pager.totalPages <= 1) {
-    return null;
-  }
+import { useId } from "react";
+import "./Pagination.css";
 
+export default function Pagination({ page, pageSize, totalCount, totalPages, onPageChange, onPageSizeChange, disabled = false, label = "Items" }) {
+  const sizeId = useId();
+  const first = totalCount ? (page - 1) * pageSize + 1 : 0;
+  const last = Math.min(page * pageSize, totalCount);
+  const start = Math.max(1, Math.min(page - 2, totalPages - 4));
+  const pages = Array.from({ length: Math.min(5, totalPages) }, (_, i) => start + i);
+  const resultLabel = totalCount === 1 && label.endsWith("s") ? label.slice(0, -1) : label;
   return (
-    <nav className="pager" aria-label={`${label} pages`}>
-      <span className="pager-status" aria-live="polite">
-        Showing {pager.from}–{pager.to} of {pager.total} {label}
-      </span>
-      <div className="pager-controls">
-        <button
-          type="button"
-          className={buttonClass}
-          onClick={() => pager.setPage(pager.page - 1)}
-          disabled={pager.page === 1}
-        >
-          Previous
-        </button>
-        <span className="pager-page">
-          Page {pager.page} of {pager.totalPages}
-        </span>
-        <button
-          type="button"
-          className={buttonClass}
-          onClick={() => pager.setPage(pager.page + 1)}
-          disabled={pager.page === pager.totalPages}
-        >
-          Next
-        </button>
+    <nav className="list-pagination" aria-label={`${label} pagination`}>
+      <p aria-live="polite">{first}–{last} of {totalCount} {resultLabel.toLowerCase()}</p>
+      <div className="pagination-size"><label htmlFor={sizeId}>Per page</label>
+        <select id={sizeId} value={pageSize} disabled={disabled} onChange={e => onPageSizeChange(Number(e.target.value))}>
+          {[10, 20, 50].map(size => <option key={size} value={size}>{size}</option>)}
+        </select>
+      </div>
+      <div className="pagination-buttons">
+        <button type="button" disabled={disabled || page === 1} onClick={() => onPageChange(1)} aria-label="First page">«</button>
+        <button type="button" disabled={disabled || page === 1} onClick={() => onPageChange(page - 1)} aria-label="Previous page">Previous</button>
+        {pages.map(number => <button type="button" key={number} aria-label={`Page ${number}`} aria-current={number === page ? "page" : undefined}
+          disabled={disabled} onClick={() => onPageChange(number)}>{number}</button>)}
+        <button type="button" disabled={disabled || page >= totalPages} onClick={() => onPageChange(page + 1)} aria-label="Next page">Next</button>
+        <button type="button" disabled={disabled || page >= totalPages} onClick={() => onPageChange(totalPages)} aria-label="Last page">»</button>
       </div>
     </nav>
   );

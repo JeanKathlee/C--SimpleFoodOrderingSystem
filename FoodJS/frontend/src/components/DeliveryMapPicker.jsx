@@ -1,213 +1,78 @@
-import { useEffect, useMemo, useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import L from "leaflet";
 import "leaflet/dist/leaflet.css";
 import markerIcon2x from "leaflet/dist/images/marker-icon-2x.png";
 import markerIcon from "leaflet/dist/images/marker-icon.png";
 import markerShadow from "leaflet/dist/images/marker-shadow.png";
 
-const defaultCenter = { lat: 14.5995, lng: 120.9842 };
-
-let leafletIconConfigured = false;
-
-function ensureLeafletIcon() {
-  if (leafletIconConfigured) {
-    return;
-  }
-
-  delete L.Icon.Default.prototype._getIconUrl;
-  L.Icon.Default.mergeOptions({
-    iconRetinaUrl: markerIcon2x,
-    iconUrl: markerIcon,
-    shadowUrl: markerShadow,
-  });
-
-  leafletIconConfigured = true;
-}
-
-async function reverseGeocode(lat, lng) {
-  const response = await fetch(
-    `https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${lat}&lon=${lng}`
-  );
-
-  if (!response.ok) {
-    throw new Error("Unable to look up address");
-  }
-
-  const data = await response.json();
-  return data.display_name || "";
-}
-
-async function searchPlaces(query) {
-  const response = await fetch(
-    `https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&q=${encodeURIComponent(query)}`
-  );
-
-  if (!response.ok) {
-    throw new Error("Unable to search location");
-  }
-
+const center = [14.5995, 120.9842];
+delete L.Icon.Default.prototype._getIconUrl;
+L.Icon.Default.mergeOptions({ iconRetinaUrl: markerIcon2x, iconUrl: markerIcon, shadowUrl: markerShadow });
+async function places(query, signal) {
+  const response = await fetch(`https://nominatim.openstreetmap.org/search?format=jsonv2&limit=5&q=${encodeURIComponent(query)}`, { signal });
+  if (!response.ok) throw new Error("Address search is unavailable. You can type the delivery address instead.");
   return response.json();
 }
-
 export default function DeliveryMapPicker({ value, onChange }) {
-  const mapContainerRef = useRef(null);
-  const mapRef = useRef(null);
-  const markerRef = useRef(null);
-  const [searchQuery, setSearchQuery] = useState(value || "");
-  const [results, setResults] = useState([]);
-  const [status, setStatus] = useState("Search a place or drag the pin to set the address.");
-
-  const currentAddress = useMemo(() => value || "", [value]);
-
+  const container = useRef(null); const map = useRef(null); const marker = useRef(null);
+  const callback = useRef(onChange); const controller = useRef(null); const sequence = useRef(0);
+  const selectedAddress = useRef(""); const [query, setQuery] = useState(value || "");
+  const [results, setResults] = useState([]); const [busy, setBusy] = useState(false);
+  const [status, setStatus] = useState("Search for a place, tap the map, or drag the pin. You can also type your delivery address.");
+  useEffect(() => { callback.current = onChange; }, [onChange]);
   useEffect(() => {
-    setSearchQuery(currentAddress);
-  }, [currentAddress]);
-
-  useEffect(() => {
-    if (!mapContainerRef.current || mapRef.current) {
-      return;
-    }
-
-    ensureLeafletIcon();
-
-    const map = L.map(mapContainerRef.current, {
-      zoomControl: true,
-      scrollWheelZoom: true,
-    }).setView([defaultCenter.lat, defaultCenter.lng], 13);
-
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19,
-      attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors',
-    }).addTo(map);
-
-    const marker = L.marker([defaultCenter.lat, defaultCenter.lng], {
-      draggable: true,
-    }).addTo(map);
-
-    mapRef.current = map;
-    markerRef.current = marker;
-
-    const syncAddressFromMarker = async (latlng) => {
+    const instance = L.map(container.current, { scrollWheelZoom: false }).setView(center, 13);
+    const pin = L.marker(center, { draggable: true }).addTo(instance);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", { maxZoom: 19, attribution: '&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a>' }).addTo(instance);
+    map.current = instance; marker.current = pin;
+    const fromPin = async latlng => {
+      controller.current?.abort(); const request = new AbortController(); controller.current = request;
+      const current = ++sequence.current; setBusy(true); setResults([]); setStatus("Looking up the selected address…");
       try {
-        setStatus("Looking up address...");
-        const address = await reverseGeocode(latlng.lat, latlng.lng);
-        if (address) {
-          onChange(address);
-          setSearchQuery(address);
-          setStatus("Address updated from pin location.");
-        } else {
-          setStatus("Pin updated, but no address was returned.");
+        const response = await fetch(`https://nominatim.openstreetmap.org/reverse?format=jsonv2&lat=${latlng.lat}&lon=${latlng.lng}`, { signal: request.signal });
+        if (!response.ok) throw new Error("Could not look up this pin. Type the address instead.");
+        const body = await response.json();
+        if (!request.signal.aborted && current === sequence.current) {
+          if (!body.display_name) throw new Error("No address was found for this pin. Type the address instead.");
+          selectedAddress.current = body.display_name; callback.current(body.display_name); setQuery(body.display_name); setStatus("Delivery address updated from the pin.");
         }
-      } catch (error) {
-        console.error("Reverse geocode failed:", error);
-        setStatus("Could not resolve the pin location.");
-      }
+      } catch (failure) { if (!request.signal.aborted && current === sequence.current) setStatus(failure.message); }
+      finally { if (current === sequence.current) setBusy(false); }
     };
-
-    marker.on("dragend", () => {
-      const latlng = marker.getLatLng();
-      syncAddressFromMarker(latlng);
-    });
-
-    map.on("click", (event) => {
-      marker.setLatLng(event.latlng);
-      syncAddressFromMarker(event.latlng);
-    });
-
-    if (currentAddress) {
-      searchPlaces(currentAddress)
-        .then((placeResults) => {
-          const firstResult = placeResults?.[0];
-          if (firstResult) {
-            const lat = Number(firstResult.lat);
-            const lng = Number(firstResult.lon);
-            map.setView([lat, lng], 15);
-            marker.setLatLng([lat, lng]);
-          }
-        })
-        .catch(() => {
-          // Keep default center if the first lookup fails.
-        });
-    }
-
-    return () => {
-      map.off();
-      map.remove();
-      mapRef.current = null;
-      markerRef.current = null;
-    };
-  }, [currentAddress, onChange]);
-
-  const handleSearch = async () => {
-    const query = searchQuery.trim();
-
-    if (!query) {
-      setResults([]);
-      setStatus("Type a place to search.");
-      return;
-    }
-
+    pin.on("dragend", () => fromPin(pin.getLatLng()));
+    instance.on("click", event => { pin.setLatLng(event.latlng); fromPin(event.latlng); });
+    return () => { controller.current?.abort(); instance.remove(); map.current = null; marker.current = null; };
+  }, []);
+  useEffect(() => {
+    setQuery(value || ""); setResults([]); sequence.current++; controller.current?.abort(); setBusy(false);
+    if (!value?.trim() || value === selectedAddress.current) return;
+    const current = sequence.current; const request = new AbortController(); controller.current = request;
+    const timer = setTimeout(async () => {
+      try {
+        const found = await places(value, request.signal); const first = found?.[0];
+        if (!request.signal.aborted && current === sequence.current && first && map.current) { const coords = [Number(first.lat), Number(first.lon)]; map.current.setView(coords, 15); marker.current.setLatLng(coords); }
+      } catch { /* Manual delivery text remains usable if positioning fails. */ }
+    }, 650);
+    return () => { clearTimeout(timer); request.abort(); };
+  }, [value]);
+  const search = async () => {
+    if (query.trim().length < 3) { setStatus("Enter at least three characters to search."); return; }
+    controller.current?.abort(); const request = new AbortController(); controller.current = request; const current = ++sequence.current;
+    setBusy(true); setResults([]); setStatus("Searching for places…");
     try {
-      setStatus("Searching for places...");
-      const foundPlaces = await searchPlaces(query);
-      setResults(foundPlaces || []);
-      setStatus(foundPlaces?.length ? "Choose a result or pin the map." : "No place found.");
-    } catch (error) {
-      console.error("Search failed:", error);
-      setResults([]);
-      setStatus("Search failed. Try another place.");
-    }
+      const found = await places(query.trim(), request.signal);
+      if (!request.signal.aborted && current === sequence.current) { setResults(Array.isArray(found) ? found.slice(0, 5) : []); setStatus(found?.length ? "Choose a search result to update the delivery address." : "No places found. Try another search or type the address."); }
+    } catch (failure) { if (!request.signal.aborted && current === sequence.current) setStatus(failure.message); }
+    finally { if (current === sequence.current) setBusy(false); }
   };
-
-  const choosePlace = async (place) => {
-    const lat = Number(place.lat);
-    const lng = Number(place.lon);
-    const address = place.display_name || "";
-
-    if (mapRef.current && markerRef.current) {
-      mapRef.current.setView([lat, lng], 15);
-      markerRef.current.setLatLng([lat, lng]);
-    }
-
-    onChange(address);
-    setSearchQuery(address);
-    setResults([]);
-    setStatus("Address updated from search result.");
+  const choose = place => {
+    sequence.current++; controller.current?.abort(); selectedAddress.current = place.display_name;
+    const coords = [Number(place.lat), Number(place.lon)]; map.current?.setView(coords, 15); marker.current?.setLatLng(coords);
+    callback.current(place.display_name); setQuery(place.display_name); setResults([]); setBusy(false); setStatus("Delivery address updated from the search result.");
   };
-
-  return (
-    <div className="delivery-map-picker">
-      <div className="delivery-map-search-row">
-        <input
-          type="search"
-          value={searchQuery}
-          onChange={(event) => setSearchQuery(event.target.value)}
-          onKeyDown={(event) => {
-            if (event.key === "Enter") {
-              event.preventDefault();
-              handleSearch();
-            }
-          }}
-          placeholder="Search your place"
-        />
-        <button type="button" onClick={handleSearch}>
-          Search
-        </button>
-      </div>
-
-      {results.length > 0 && (
-        <div className="delivery-map-results">
-          {results.map((place) => (
-            <button key={place.place_id} type="button" onClick={() => choosePlace(place)}>
-              <strong>{place.display_name}</strong>
-              <span>Tap to set pin here</span>
-            </button>
-          ))}
-        </div>
-      )}
-
-      <div ref={mapContainerRef} className="delivery-map-canvas" />
-      <p className="delivery-map-status">{status}</p>
-    </div>
-  );
+  return <div className="delivery-map-picker"><label htmlFor="checkout-map-search">Find a delivery location</label><div className="delivery-map-search-row">
+    <input id="checkout-map-search" type="search" value={query} placeholder="Search for a street or landmark" onChange={event => { sequence.current++; controller.current?.abort(); setBusy(false); setResults([]); setQuery(event.target.value); }} onKeyDown={event => { if (event.key === "Enter") { event.preventDefault(); search(); } if (event.key === "Escape") setResults([]); }} />
+    <button type="button" disabled={busy} onClick={search}>{busy ? "Searching…" : "Search"}</button>
+  </div>{!!results.length && <ul className="delivery-map-results" aria-label="Address search results">{results.map(place => <li key={place.place_id}><button type="button" onClick={() => choose(place)}>{place.display_name}</button></li>)}</ul>}
+  <div ref={container} className="delivery-map-canvas" aria-label="Delivery map: tap to position the pin" /><p className="delivery-map-status" role="status">{status}</p></div>;
 }
