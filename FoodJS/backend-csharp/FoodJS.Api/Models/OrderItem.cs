@@ -14,6 +14,8 @@ public class OrderItem
 
     public required string ItemName { get; set; }
 
+    public string? SelectedChoice { get; set; }
+
     public int Quantity { get; set; }
 
     public decimal SnapshotPrice { get; set; }

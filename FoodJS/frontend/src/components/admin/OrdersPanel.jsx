@@ -1,5 +1,7 @@
 function formatDate(value) {
   return new Date(value).toLocaleString("en-PH", {
+    timeZone: "Asia/Manila",
+    year: "numeric",
     month: "short",
     day: "2-digit",
     hour: "2-digit",
@@ -11,7 +13,8 @@ function formatCurrency(value) {
   return new Intl.NumberFormat("en-PH", {
     style: "currency",
     currency: "PHP",
-    maximumFractionDigits: 0,
+    minimumFractionDigits: 2,
+    maximumFractionDigits: 2,
   }).format(value);
 }
 

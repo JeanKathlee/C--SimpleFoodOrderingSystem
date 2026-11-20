@@ -6,13 +6,13 @@ const NAV_ITEMS = [
   { key: "coupons", label: "Coupons" },
 ];
 
-export default function AdminSidebar({ activeSection, onSectionChange }) {
+export default function AdminSidebar({ activeSection, onSectionChange, disabled = false }) {
   return (
     <aside className="admin-sidebar">
       <div className="admin-brand">
         <span className="admin-brand-dot" aria-hidden="true" />
         <div>
-          <p className="admin-brand-title">FoodOps</p>
+          <p className="admin-brand-title">FoodJS</p>
           <p className="admin-brand-subtitle">Admin Features</p>
         </div>
       </div>
@@ -22,6 +22,8 @@ export default function AdminSidebar({ activeSection, onSectionChange }) {
           <button
             key={item.key}
             type="button"
+            aria-current={activeSection === item.key ? "page" : undefined}
+            disabled={disabled}
             className={`admin-nav-item ${
               activeSection === item.key ? "active" : ""
             }`}

@@ -2,6 +2,7 @@ import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import logo from "../../assets/logo.png";
 import { clearAuthSession, getAuthSession } from "../lib/auth";
+import { cartItemKey } from "../lib/cartItems";
 import {
   fetchMenuFromBackend,
   getCategoriesFromMenu,
@@ -333,9 +334,10 @@ export default function Menu() {
                 <>
                   <div className="menu-bag-list">
                     {cartItems.map((item) => (
-                      <div key={item.menuItemId} className="menu-bag-item">
+                      <div key={cartItemKey(item)} className="menu-bag-item">
                         <div>
                           <h3>{item.name}</h3>
+                          {item.selectedChoice && <p>{item.selectedChoice}</p>}
                           <p>{formatPrice(item.price * item.quantity)}</p>
                         </div>
                         <div className="menu-bag-actions">

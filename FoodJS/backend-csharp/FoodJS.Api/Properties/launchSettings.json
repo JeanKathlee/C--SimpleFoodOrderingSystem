@@ -1,11 +1,22 @@
 {
   "$schema": "https://json.schemastore.org/launchsettings.json",
   "profiles": {
+    "migration": {
+      "commandName": "Project",
+      "dotnetRunMessages": true,
+      "launchBrowser": false,
+      "applicationUrl": "http://localhost:3002",
+      "environmentVariables": {
+        "ASPNETCORE_ENVIRONMENT": "Development",
+        "MigrationBridge__Enabled": "true",
+        "ConnectionStrings__DefaultConnection": "Data Source=foodjs.migration.db"
+      }
+    },
     "http": {
       "commandName": "Project",
       "dotnetRunMessages": true,
       "launchBrowser": false,
-      "applicationUrl": "http://localhost:3001",
+      "applicationUrl": "http://localhost:3002",
       "environmentVariables": {
         "ASPNETCORE_ENVIRONMENT": "Development"
       }

@@ -69,6 +69,9 @@ namespace FoodJS.Api.Migrations
                     b.Property<int>("Quantity")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("SelectedChoice")
+                        .HasColumnType("TEXT");
+
                     b.Property<int>("ShoppingCartId")
                         .HasColumnType("INTEGER");
 
@@ -104,6 +107,29 @@ namespace FoodJS.Api.Migrations
                     b.HasKey("Id");
 
                     b.ToTable("Categories");
+                });
+
+            modelBuilder.Entity("FoodJS.Api.Models.CheckoutSubmission", b =>
+                {
+                    b.Property<int>("UserId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Key")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("OrderId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("RequestHash")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("UserId", "Key");
+
+                    b.ToTable("CheckoutSubmissions");
                 });
 
             modelBuilder.Entity("FoodJS.Api.Models.Coupon", b =>
@@ -251,7 +277,16 @@ namespace FoodJS.Api.Migrations
                     b.Property<bool>("Archived")
                         .HasColumnType("INTEGER");
 
+                    b.Property<string>("CouponCode")
+                        .HasColumnType("TEXT");
+
                     b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("CustomerName")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("MobileNumber")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Notes")
@@ -301,6 +336,9 @@ namespace FoodJS.Api.Migrations
 
                     b.Property<int>("Quantity")
                         .HasColumnType("INTEGER");
+
+                    b.Property<string>("SelectedChoice")
+                        .HasColumnType("TEXT");
 
                     b.Property<decimal>("SnapshotPrice")
                         .HasColumnType("TEXT");

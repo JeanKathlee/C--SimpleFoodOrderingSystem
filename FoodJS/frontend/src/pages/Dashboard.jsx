@@ -6,6 +6,7 @@ import AdminTopbar from "../components/admin/AdminTopbar";
 import AnalyticsCards from "../components/admin/AnalyticsCards";
 import RevenueChart from "../components/admin/RevenueChart";
 import OrdersPanel from "../components/admin/OrdersPanel";
+import OrderManagement from "../components/admin/OrderManagement";
 import MenuManagement from "../components/admin/MenuManagement";
 import CategoryManagement from "../components/admin/CategoryManagement";
 import CouponManagement from "../components/admin/CouponManagement";
@@ -25,18 +26,27 @@ const DEFAULT_WEEKLY_REVENUE = [
   { day: "Sun", amount: 0 },
 ];
 
+async function menuFailureMessage(response, fallback) {
+  const body = await response.json().catch(() => null);
+  if (typeof body?.message === "string" && body.message.trim()) return body.message;
+  if (response.status === 401) return "Your session is missing or has expired. Sign out and sign in again.";
+  if (response.status === 403) return "Administrator access is required. Sign out and sign in again using your admin account.";
+  if (response.status >= 500) return "The server could not complete this request. Please retry.";
+  return fallback;
+}
+
 function matchesDate(dateValue, fromDate, toDate) {
   const value = new Date(dateValue).getTime();
 
   if (fromDate) {
-    const from = new Date(`${fromDate}T00:00:00.000Z`).getTime();
+    const from = new Date(`${fromDate}T00:00:00.000+08:00`).getTime();
     if (value < from) {
       return false;
     }
   }
 
   if (toDate) {
-    const to = new Date(`${toDate}T23:59:59.000Z`).getTime();
+    const to = new Date(`${toDate}T23:59:59.999+08:00`).getTime();
     if (value > to) {
       return false;
     }
@@ -58,6 +68,8 @@ function normalizeMenu(items = [], categories = []) {
     return {
       id: String(item.id ?? `M-${1000 + index}`),
       name: item.name || "Unnamed Item",
+      description: item.description ?? "",
+      image: item.image ?? null,
       categoryId: item.categoryId || category?.id || categories[0]?.id || "",
       price: Number(item.price || 0),
       prepTime: Number(item.prepTime || 10),
@@ -122,6 +134,12 @@ export default function Dashboard() {
   const [activeSection, setActiveSection] = useState("dashboard");
   const [categories, setCategories] = useState([]);
   const [menuItems, setMenuItems] = useState([]);
+  const [menuRevision, setMenuRevision] = useState(0);
+  const [menuCategories, setMenuCategories] = useState([]);
+  const [orderBusy, setOrderBusy] = useState(false);
+  const [menuDraft, setMenuDraft] = useState({ dirty: false, busy: false });
+  const [menuCategoryLoading, setMenuCategoryLoading] = useState(true);
+  const [menuCategoryError, setMenuCategoryError] = useState("");
   const [coupons, setCoupons] = useState([]);
   const [allOrders, setAllOrders] = useState([]);
   const [weeklyRevenue, setWeeklyRevenue] = useState(DEFAULT_WEEKLY_REVENUE);
@@ -193,6 +211,17 @@ export default function Dashboard() {
     }
   };
 
+  const loadMenuCategories = async () => {
+    try {
+      const response = await fetch(import.meta.env.VITE_MENU_CATEGORY_URL || "/api/categories");
+      if (!response.ok) throw new Error("Could not load menu categories. Please retry.");
+      const data = await response.json();
+      if (!Array.isArray(data)) throw new Error("The categories response was incomplete.");
+      setMenuCategories(data); setMenuCategoryError("");
+    } catch (error) { setMenuCategoryError(error.message); }
+    finally { setMenuCategoryLoading(false); }
+  };
+
   const loadAllOrders = async () => {
     try {
       const response = await fetch("/api/orders/admin/all", {
@@ -207,69 +236,13 @@ export default function Dashboard() {
     }
   };
 
-  const handleUpdateOrderStatus = async (orderId, newStatus) => {
-    try {
-      const response = await fetch(`/api/orders/${orderId}/status`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session?.token}`,
-        },
-        body: JSON.stringify({ status: newStatus }),
-      });
-
-      if (response.ok) {
-        const updated = await response.json();
-        const normalized = normalizeOrders([updated]);
-        setAllOrders((prev) =>
-          prev.map((order) => (order.id === orderId ? normalized[0] : order))
-        );
-        success("Order status updated successfully!");
-      } else {
-        errorNotif("Failed to update order status");
-      }
-    } catch (err) {
-      console.error("Error:", err);
-      errorNotif("Error updating order status");
-    }
-  };
-
-  const handleDeleteOrder = (orderId) => {
-    const order = allOrders.find((item) => item.id === orderId);
-
-    setModalConfig({
-      open: true,
-      title: "Delete order",
-      message: `Order ${orderId}${order?.customerName ? ` for ${order.customerName}` : ""} will be permanently removed from the records.`,
-      confirmLabel: "Delete Order",
-      onConfirm: async () => {
-        try {
-          const response = await fetch(`/api/orders/${orderId}`, {
-            method: "DELETE",
-            headers: {
-              Authorization: `Bearer ${session?.token}`,
-            },
-          });
-
-          if (response.ok) {
-            setAllOrders((prev) => prev.filter((item) => item.id !== orderId));
-            setModalConfig((current) => ({ ...current, open: false }));
-            success("Order deleted successfully!");
-            bumpSyncState("orders");
-          } else {
-            errorNotif("Failed to delete order");
-            setModalConfig((current) => ({ ...current, open: false }));
-          }
-        } catch (err) {
-          console.error("Error:", err);
-          errorNotif("Error deleting order");
-          setModalConfig((current) => ({ ...current, open: false }));
-        }
-      },
-    });
-  };
-
   useEffect(() => {
+    if (activeSection === "manage-orders") return;
+    if (activeSection === "menu") {
+      loadMenuCategories();
+      const menuPollingId = setInterval(loadMenuCategories, 15000);
+      return () => clearInterval(menuPollingId);
+    }
     loadAdminData();
     loadAllOrders();
     const pollingId = setInterval(() => {
@@ -280,7 +253,7 @@ export default function Dashboard() {
     return () => clearInterval(pollingId);
     // The loaders intentionally retain the authenticated session captured on mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [activeSection]);
 
   const filteredAdminOrders = useMemo(() => {
     const customerFilter = filters.customer.trim().toLowerCase();
@@ -357,18 +330,16 @@ export default function Dashboard() {
         body: JSON.stringify(payload),
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-        errorNotif(error?.message || "Failed to add menu item");
-        return;
-      }
+      if (!response.ok) return { ok: false, message: await menuFailureMessage(response, "Could not add the menu item. Please retry.") };
 
       const newItem = await response.json();
       setMenuItems((current) => [newItem, ...current]);
       success("Menu item added successfully!");
       bumpSyncState("menu");
+      setMenuRevision(value => value + 1);
+      return { ok: true };
     } catch (err) {
-      errorNotif("Error adding menu item");
+      return { ok: false, message: "Could not connect to save the item. Please retry." };
     }
   };
 
@@ -384,11 +355,7 @@ export default function Dashboard() {
         body: JSON.stringify(payload),
       });
 
-      if (!response.ok) {
-        const error = await response.json();
-        errorNotif(error?.message || "Failed to update menu item");
-        return;
-      }
+      if (!response.ok) return { ok: false, message: await menuFailureMessage(response, "Could not update the menu item. Please retry.") };
 
       const updatedItem = await response.json();
       setMenuItems((current) =>
@@ -396,16 +363,19 @@ export default function Dashboard() {
       );
       success("Menu item updated successfully!");
       bumpSyncState("menu");
+      setMenuRevision(value => value + 1);
+      return { ok: true };
     } catch (err) {
-      errorNotif("Error updating menu item");
+      return { ok: false, message: "Could not connect to save your changes. Please retry." };
     }
   };
 
-  const handleDeleteMenuItem = (id) => {
+  const handleDeleteMenuItem = (item, onDeleted) => {
+    const id = item.id;
     setModalConfig({
       open: true,
       title: "Delete menu item",
-      message: "This action removes the item from the menu list.",
+      message: `Delete “${item.name}”? This permanently removes it from the menu. Items used in existing orders must be marked unavailable instead.`,
       confirmLabel: "Delete Item",
       onConfirm: async () => {
         try {
@@ -417,22 +387,34 @@ export default function Dashboard() {
             },
           });
 
-          if (!response.ok) {
-            const error = await response.json();
-            errorNotif(error?.message || "Failed to delete menu item");
-            return;
-          }
+          if (!response.ok) throw new Error(await menuFailureMessage(response, "Could not delete the menu item. Please retry."));
 
           setMenuItems((current) => current.filter((item) => item.id !== id));
           setModalConfig((current) => ({ ...current, open: false }));
           success("Menu item deleted successfully!");
           bumpSyncState("menu");
+          setMenuRevision(value => value + 1);
+          onDeleted?.();
         } catch (err) {
-          errorNotif("Error deleting menu item");
-          setModalConfig((current) => ({ ...current, open: false }));
+          throw new Error(err.message || "Could not delete the menu item. Please retry.");
         }
       },
     });
+  };
+
+  const handleSetMenuAvailability = async (id, isAvailable) => {
+    try {
+      const response = await fetch(`/api/menu/${id}/availability`, {
+        method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.token}` },
+        body: JSON.stringify({ isAvailable }),
+      });
+      if (!response.ok) return { ok: false, message: await menuFailureMessage(response, "Could not update availability. Please retry.") };
+      const data = await response.json();
+      setMenuItems(current => current.map(item => item.id === id ? data : item));
+      setMenuRevision(value => value + 1);
+      success(isAvailable ? "Item is now available." : "Item marked unavailable.");
+      return { ok: true };
+    } catch (_error) { return { ok: false, message: "Could not connect to update availability. Please retry." }; }
   };
 
   const handleAddCategory = async (payload) => {
@@ -650,15 +632,26 @@ export default function Dashboard() {
     setModalConfig((current) => ({ ...current, open: false }));
   };
 
+  const handleSectionChange = section => {
+    if (section === activeSection || menuDraft.busy || orderBusy) return;
+    if (activeSection === "menu" && menuDraft.dirty) {
+      setModalConfig({ open: true, title: "Leave Menu Management?", message: "Your menu draft has not been saved. Discard it to leave this page?",
+        confirmLabel: "Discard changes", onConfirm: () => { setActiveSection(section); closeModal(); } });
+    } else setActiveSection(section);
+  };
+
   return (
-    <div className="admin-layout">
-      <AdminSidebar activeSection={activeSection} onSectionChange={setActiveSection} />
+    <div className={`admin-layout ${activeSection === "menu" || activeSection === "manage-orders" ? "admin-menu-view" : ""}`}>
+      <AdminSidebar activeSection={activeSection} onSectionChange={handleSectionChange} disabled={menuDraft.busy || orderBusy} />
 
       <main className="admin-main">
         <AdminTopbar
           onLogout={handleLogout}
           adminName={session?.user?.name || "Admin"}
-          syncLabel={syncLabel}
+          syncLabel={activeSection === "menu" || activeSection === "manage-orders" ? null : syncLabel}
+          title={activeSection === "menu" ? "Menu Management" : activeSection === "manage-orders" ? "Order Management" : undefined}
+          subtitle={activeSection === "menu" ? "Manage your items, prices, and availability." : activeSection === "manage-orders" ? "Review orders and manage their progress." : undefined}
+          disabled={menuDraft.busy || orderBusy}
         />
 
         {activeSection === "dashboard" && (
@@ -696,26 +689,20 @@ export default function Dashboard() {
           />
         )}
 
-        {activeSection === "manage-orders" && (
-          <OrdersPanel
-            title="All Orders - Admin Management"
-            orders={filteredAdminOrders}
-            statusOptions={statusOptions}
-            filters={filters}
-            onFilterChange={handleOrderFilter}
-            isAdmin={true}
-            onUpdateStatus={handleUpdateOrderStatus}
-            onDeleteOrder={handleDeleteOrder}
-          />
-        )}
+        {activeSection === "manage-orders" && <OrderManagement onBusyChange={setOrderBusy} />}
 
         {activeSection === "menu" && (
           <MenuManagement
-            categories={categories}
-            menuItems={menuItems}
+            categories={menuCategories}
+            categoryLoading={menuCategoryLoading}
+            categoryError={menuCategoryError}
+            onRetryCategories={() => { setMenuCategoryLoading(true); loadMenuCategories(); }}
+            revision={menuRevision}
+            onDraftChange={setMenuDraft}
             onAddMenuItem={handleAddMenuItem}
             onUpdateMenuItem={handleUpdateMenuItem}
             onDeleteMenuItem={handleDeleteMenuItem}
+            onSetAvailability={handleSetMenuAvailability}
           />
         )}
 
@@ -742,7 +729,7 @@ export default function Dashboard() {
       <ConfirmModal
         open={logoutConfirm}
         title="Confirm Logout"
-        message="Are you sure you want to logout?"
+        message={menuDraft.dirty ? "Your menu draft has not been saved. Logging out will discard it. Continue?" : "Are you sure you want to logout?"}
         confirmLabel="Logout"
         onCancel={() => setLogoutConfirm(false)}
         onConfirm={confirmLogout}
