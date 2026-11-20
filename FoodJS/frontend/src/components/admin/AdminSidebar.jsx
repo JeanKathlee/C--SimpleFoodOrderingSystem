@@ -4,6 +4,7 @@ const NAV_ITEMS = [
   { key: "menu", label: "Menu" },
   { key: "categories", label: "Categories" },
   { key: "coupons", label: "Coupons" },
+  { key: "users", label: "Users" },
 ];
 
 export default function AdminSidebar({ activeSection, onSectionChange }) {

@@ -21,6 +21,23 @@ export function clearAuthSession() {
   localStorage.removeItem(AUTH_STORAGE_KEY);
 }
 
+// Logout: tell the server to revoke the token, then clear the local session
+export async function logoutUser() {
+  const token = getAuthSession()?.token;
+  try {
+    if (token) {
+      await fetch('/api/users/logout', {
+        method: 'POST',
+        headers: { Authorization: `Bearer ${token}` },
+      });
+    }
+  } catch (_error) {
+    // Still log out locally if the server is unreachable.
+  } finally {
+    clearAuthSession();
+  }
+}
+
 export function isAuthenticated() {
   const session = getAuthSession();
   return Boolean(session?.token && session?.user);
