@@ -1,4 +1,21 @@
+using System.ComponentModel.DataAnnotations;
+
 namespace FoodJS.Api.Features.Orders;
+
+public sealed class OrderPageRequest
+{
+    [Range(1, int.MaxValue)] public int Page { get; init; } = 1;
+    [Range(1, 50)] public int PageSize { get; init; } = 10;
+    [StringLength(120)] public string? Search { get; init; }
+    public string? Status { get; init; }
+    public DateOnly? FromDate { get; init; }
+    public DateOnly? ToDate { get; init; }
+}
+
+public sealed record OrderListItemResponse(string Id, string CustomerName, string Status,
+    int ItemCount, decimal Total, DateTimeOffset CreatedAt);
+public sealed record OrderPageResponse(IReadOnlyList<OrderListItemResponse> Items,
+    int TotalCount, int Page, int PageSize, int TotalPages);
 
 // The shape of an order item in the API response.
 public sealed record OrderItemResponse(

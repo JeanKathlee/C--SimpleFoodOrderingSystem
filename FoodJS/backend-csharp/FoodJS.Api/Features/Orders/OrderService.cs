@@ -3,6 +3,8 @@ using FoodJS.Api.Data;
 using FoodJS.Api.Features.Checkout;
 using FoodJS.Api.Models;
 using Microsoft.EntityFrameworkCore;
+using System.Globalization;
+using System.Runtime.CompilerServices;
 
 namespace FoodJS.Api.Features.Orders;
 
@@ -12,6 +14,52 @@ public sealed class OrderService(FoodJsDbContext db) : IOrderService
     // address (map picker / typed). The full text goes into AddressLine1.
     private const string UnspecifiedCity = "N/A";
     private const string DefaultPaymentMethod = "cash";
+
+    public async Task<OrderResponse?> GetForAdminAsync(string publicId, CancellationToken ct = default)
+    {
+        if (!PublicId.TryParseOrder(publicId, out var id)) return null;
+        return (await BuildResponsesAsync(db.Orders.Where(order => order.Id == id), ct)).FirstOrDefault();
+    }
+
+    public async Task<OrderPageResponse> GetPageAsync(int? userId, OrderPageRequest request, CancellationToken ct = default)
+    {
+        if (request.Page < 1 || request.PageSize is < 1 or > 50)
+            throw new ApiException(400, "Page must be positive and pageSize must be between 1 and 50.");
+        if (request.FromDate > request.ToDate || request.ToDate == DateOnly.MaxValue)
+            throw new ApiException(400, "Choose a valid date range with From on or before To.");
+        var status = string.IsNullOrWhiteSpace(request.Status) || request.Status == "All" ? null : request.Status;
+        if (status is not null && !OrderStatusRules.IsKnown(status)) throw new ApiException(400, "Invalid order status.");
+        var search = request.Search?.Trim().ToLowerInvariant() ?? "";
+        // Dates in these screens are Philippine calendar dates. The upper bound is exclusive.
+        static string Boundary(DateOnly date) => new DateTimeOffset(date.ToDateTime(TimeOnly.MinValue), TimeSpan.FromHours(8))
+            .ToUniversalTime().ToString("O", CultureInfo.InvariantCulture);
+        var from = request.FromDate is { } first ? Boundary(first) : null;
+        var to = request.ToDate is { } last ? Boundary(last.AddDays(1)) : null;
+        // SQLite cannot translate DateTimeOffset ordering. Parameterized SQL uses julianday
+        // to compare instants, then LIMIT/OFFSET before EF materializes the selected page.
+        const string sql = """
+            SELECT o.* FROM Orders o JOIN OrderStatuses s ON s.Id = o.OrderStatusId
+            WHERE ({0} IS NULL OR o.UserId = {0}) AND ({1} IS NULL OR s.Name = {1})
+              AND ({2} = '' OR instr(lower(o.CustomerName), {2}) > 0 OR instr(lower('O-' || o.Id), {2}) > 0)
+              AND ({3} IS NULL OR julianday(o.CreatedAt) >= julianday({3}))
+              AND ({4} IS NULL OR julianday(o.CreatedAt) < julianday({4}))
+            """;
+        object[] args = [userId!, status!, search, from!, to!];
+        var count = await db.Orders.FromSql(FormattableStringFactory.Create(sql, args)).CountAsync(ct);
+        var totalPages = Math.Max(1, (int)Math.Ceiling(count / (double)request.PageSize));
+        var page = Math.Min(request.Page, totalPages);
+        object[] pageArgs = [.. args, request.PageSize, (page - 1) * request.PageSize];
+        var orders = await db.Orders.FromSql(FormattableStringFactory.Create(
+                sql + " ORDER BY julianday(o.CreatedAt) DESC, o.Id DESC LIMIT {5} OFFSET {6}", pageArgs))
+            .AsNoTracking().Include(order => order.OrderStatus).ToListAsync(ct);
+        var ids = orders.Select(order => order.Id).ToList();
+        var quantities = await db.OrderItems.Where(item => ids.Contains(item.OrderId)).GroupBy(item => item.OrderId)
+            .Select(group => new { Id = group.Key, Count = group.Sum(item => item.Quantity) }).ToDictionaryAsync(item => item.Id, item => item.Count, ct);
+        var items = orders.OrderByDescending(order => order.CreatedAt).ThenByDescending(order => order.Id)
+            .Select(order => new OrderListItemResponse(PublicId.Order(order.Id), order.CustomerName ?? "", order.OrderStatus.Name,
+                quantities.GetValueOrDefault(order.Id), order.TotalAmount, order.CreatedAt)).ToList();
+        return new(items, count, page, request.PageSize, totalPages);
+    }
 
     // ---- Order Management: List / View / Track --------------------------------------
 

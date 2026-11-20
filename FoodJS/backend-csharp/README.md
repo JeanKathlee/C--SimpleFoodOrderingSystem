@@ -73,6 +73,33 @@ The existing `GET /api/menu` array response remains available for existing calle
 The new admin screen requires this C# endpoint; the Express reference is unchanged.
 Category loading still depends on the category API owned by the assigned teammate.
 
+## Order Management pagination and details
+
+- `GET /api/orders/paged` lists only the authenticated customer's orders.
+- `GET /api/orders/admin/paged` lists all customers' orders for admins only.
+- `GET /api/orders/admin/{id}` provides complete saved details for admins;
+  the existing customer detail route keeps its ownership check.
+
+Paged routes accept `page` (default 1), `pageSize` (10, maximum 50), `search`
+(order ID or saved customer name, up to 120 characters), `status`, `fromDate`,
+and `toDate`. Calendar dates use Philippine time (UTC+8), with an exclusive
+next-day upper bound. Invalid ranges return HTTP 400. Results contain `items`,
+`totalCount`, `page`, `pageSize`, and `totalPages`; summary items include order ID,
+customer name, status, total, creation time, and the sum of item quantities.
+
+SQLite parameterized queries compare/order creation instants with `julianday`
+and apply `LIMIT/OFFSET` before materializing a page. Summary responses do not
+load every order's item details or history. Sorting is newest first with ID as
+the tie breaker; pages clamp after deletions. Existing array routes remain for
+compatibility with other callers, including the separate dashboard analytics.
+
+Admin UI and customer history use these paged routes. Admin details are fetched
+on demand. Mutation controls lock during requests, cancellation requires
+confirmation, and failed confirmations keep their error message and retry path.
+Tracking shows saved delivery details, totals, item choices, and status history.
+Notifications still depend on the teammate-owned API and the development bridge
+does not migrate or synchronize that API's records.
+
 ## Checkout item choices
 
 Order requests accept an optional `selectedChoice` on each item. The server uses
@@ -135,7 +162,7 @@ Test authentication is defined only inside the test project; users, roles,
 categories, and coupons are seeded as dependency data. This does not implement or
 verify teammate-owned authentication/profile/cart/category/coupon/notification APIs.
 Browser checkout summary/map behavior and full frontend-to-C# integration remain
-team acceptance checks once those APIs are available. The suite currently has 82
+team acceptance checks once those APIs are available. The suite currently has 92
 passing cases; PR approval and merging remain with the project lead.
 
 ## Suggested team ownership

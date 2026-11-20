@@ -6,6 +6,7 @@ import AdminTopbar from "../components/admin/AdminTopbar";
 import AnalyticsCards from "../components/admin/AnalyticsCards";
 import RevenueChart from "../components/admin/RevenueChart";
 import OrdersPanel from "../components/admin/OrdersPanel";
+import OrderManagement from "../components/admin/OrderManagement";
 import MenuManagement from "../components/admin/MenuManagement";
 import CategoryManagement from "../components/admin/CategoryManagement";
 import CouponManagement from "../components/admin/CouponManagement";
@@ -38,14 +39,14 @@ function matchesDate(dateValue, fromDate, toDate) {
   const value = new Date(dateValue).getTime();
 
   if (fromDate) {
-    const from = new Date(`${fromDate}T00:00:00.000Z`).getTime();
+    const from = new Date(`${fromDate}T00:00:00.000+08:00`).getTime();
     if (value < from) {
       return false;
     }
   }
 
   if (toDate) {
-    const to = new Date(`${toDate}T23:59:59.000Z`).getTime();
+    const to = new Date(`${toDate}T23:59:59.999+08:00`).getTime();
     if (value > to) {
       return false;
     }
@@ -135,6 +136,7 @@ export default function Dashboard() {
   const [menuItems, setMenuItems] = useState([]);
   const [menuRevision, setMenuRevision] = useState(0);
   const [menuCategories, setMenuCategories] = useState([]);
+  const [orderBusy, setOrderBusy] = useState(false);
   const [menuDraft, setMenuDraft] = useState({ dirty: false, busy: false });
   const [menuCategoryLoading, setMenuCategoryLoading] = useState(true);
   const [menuCategoryError, setMenuCategoryError] = useState("");
@@ -234,69 +236,8 @@ export default function Dashboard() {
     }
   };
 
-  const handleUpdateOrderStatus = async (orderId, newStatus) => {
-    try {
-      const response = await fetch(`/api/orders/${orderId}/status`, {
-        method: "PATCH",
-        headers: {
-          "Content-Type": "application/json",
-          Authorization: `Bearer ${session?.token}`,
-        },
-        body: JSON.stringify({ status: newStatus }),
-      });
-
-      if (response.ok) {
-        const updated = await response.json();
-        const normalized = normalizeOrders([updated]);
-        setAllOrders((prev) =>
-          prev.map((order) => (order.id === orderId ? normalized[0] : order))
-        );
-        success("Order status updated successfully!");
-      } else {
-        errorNotif("Failed to update order status");
-      }
-    } catch (err) {
-      console.error("Error:", err);
-      errorNotif("Error updating order status");
-    }
-  };
-
-  const handleDeleteOrder = (orderId) => {
-    const order = allOrders.find((item) => item.id === orderId);
-
-    setModalConfig({
-      open: true,
-      title: "Delete order",
-      message: `Order ${orderId}${order?.customerName ? ` for ${order.customerName}` : ""} will be permanently removed from the records.`,
-      confirmLabel: "Delete Order",
-      onConfirm: async () => {
-        try {
-          const response = await fetch(`/api/orders/${orderId}`, {
-            method: "DELETE",
-            headers: {
-              Authorization: `Bearer ${session?.token}`,
-            },
-          });
-
-          if (response.ok) {
-            setAllOrders((prev) => prev.filter((item) => item.id !== orderId));
-            setModalConfig((current) => ({ ...current, open: false }));
-            success("Order deleted successfully!");
-            bumpSyncState("orders");
-          } else {
-            errorNotif("Failed to delete order");
-            setModalConfig((current) => ({ ...current, open: false }));
-          }
-        } catch (err) {
-          console.error("Error:", err);
-          errorNotif("Error deleting order");
-          setModalConfig((current) => ({ ...current, open: false }));
-        }
-      },
-    });
-  };
-
   useEffect(() => {
+    if (activeSection === "manage-orders") return;
     if (activeSection === "menu") {
       loadMenuCategories();
       const menuPollingId = setInterval(loadMenuCategories, 15000);
@@ -692,7 +633,7 @@ export default function Dashboard() {
   };
 
   const handleSectionChange = section => {
-    if (section === activeSection || menuDraft.busy) return;
+    if (section === activeSection || menuDraft.busy || orderBusy) return;
     if (activeSection === "menu" && menuDraft.dirty) {
       setModalConfig({ open: true, title: "Leave Menu Management?", message: "Your menu draft has not been saved. Discard it to leave this page?",
         confirmLabel: "Discard changes", onConfirm: () => { setActiveSection(section); closeModal(); } });
@@ -700,17 +641,17 @@ export default function Dashboard() {
   };
 
   return (
-    <div className={`admin-layout ${activeSection === "menu" ? "admin-menu-view" : ""}`}>
-      <AdminSidebar activeSection={activeSection} onSectionChange={handleSectionChange} disabled={menuDraft.busy} />
+    <div className={`admin-layout ${activeSection === "menu" || activeSection === "manage-orders" ? "admin-menu-view" : ""}`}>
+      <AdminSidebar activeSection={activeSection} onSectionChange={handleSectionChange} disabled={menuDraft.busy || orderBusy} />
 
       <main className="admin-main">
         <AdminTopbar
           onLogout={handleLogout}
           adminName={session?.user?.name || "Admin"}
-          syncLabel={activeSection === "menu" ? null : syncLabel}
-          title={activeSection === "menu" ? "Menu Management" : undefined}
-          subtitle={activeSection === "menu" ? "Manage your items, prices, and availability." : undefined}
-          disabled={menuDraft.busy}
+          syncLabel={activeSection === "menu" || activeSection === "manage-orders" ? null : syncLabel}
+          title={activeSection === "menu" ? "Menu Management" : activeSection === "manage-orders" ? "Order Management" : undefined}
+          subtitle={activeSection === "menu" ? "Manage your items, prices, and availability." : activeSection === "manage-orders" ? "Review orders and manage their progress." : undefined}
+          disabled={menuDraft.busy || orderBusy}
         />
 
         {activeSection === "dashboard" && (
@@ -748,18 +689,7 @@ export default function Dashboard() {
           />
         )}
 
-        {activeSection === "manage-orders" && (
-          <OrdersPanel
-            title="All Orders - Admin Management"
-            orders={filteredAdminOrders}
-            statusOptions={statusOptions}
-            filters={filters}
-            onFilterChange={handleOrderFilter}
-            isAdmin={true}
-            onUpdateStatus={handleUpdateOrderStatus}
-            onDeleteOrder={handleDeleteOrder}
-          />
-        )}
+        {activeSection === "manage-orders" && <OrderManagement onBusyChange={setOrderBusy} />}
 
         {activeSection === "menu" && (
           <MenuManagement

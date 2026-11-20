@@ -366,6 +366,88 @@ public sealed class AssignedApiFlowTests : IAsyncLifetime
     public async Task Menu_paging_rejects_invalid_bounds_and_ids(string query) =>
         await Error(await anonymous.GetAsync($"/api/menu/paged?{query}"), HttpStatusCode.BadRequest);
 
+    [Fact]
+    public async Task Order_pages_are_bounded_newest_first_and_customer_scoped()
+    {
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<FoodJsDbContext>();
+            var pending = await db.OrderStatuses.SingleAsync(status => status.Name == "Pending");
+            var other = await db.Users.SingleAsync(user => user.FirstName == "Other");
+            foreach (var index in Enumerable.Range(0, 24))
+            {
+                var order = new Order { UserId = customerId, CustomerName = "Page recipient", OrderStatusId = pending.Id,
+                    TotalAmount = 598.50m, CreatedAt = DateTimeOffset.Parse("2026-11-20T10:00:00Z").AddMinutes(index) };
+                db.OrderItems.Add(new OrderItem { Order = order, MenuItemId = menuId, ItemName = "Burger", Quantity = 3, SnapshotPrice = 199.50m, LineTotal = 598.50m });
+            }
+            db.Orders.Add(new Order { UserId = other.Id, CustomerName = "Private other order", OrderStatusId = pending.Id });
+            await db.SaveChangesAsync();
+        }
+        var first = await Read<OrderPageResponse>(await customer.GetAsync("/api/orders/paged"));
+        var second = await Read<OrderPageResponse>(await customer.GetAsync("/api/orders/paged?page=2"));
+        var last = await Read<OrderPageResponse>(await customer.GetAsync("/api/orders/paged?page=3"));
+        Assert.Equal(24, first.TotalCount); Assert.Equal(3, first.TotalPages);
+        Assert.Equal(10, first.Items.Count); Assert.Equal(10, second.Items.Count); Assert.Equal(4, last.Items.Count);
+        Assert.Equal(24, first.Items.Concat(second.Items).Concat(last.Items).Select(order => order.Id).Distinct().Count());
+        Assert.All(first.Items, order => { Assert.Equal(3, order.ItemCount); Assert.Equal(598.50m, order.Total); });
+        Assert.True(first.Items[0].CreatedAt > second.Items[0].CreatedAt);
+        Assert.Single((await Read<OrderPageResponse>(await otherCustomer.GetAsync("/api/orders/paged"))).Items);
+        Assert.Equal(25, (await Read<OrderPageResponse>(await admin.GetAsync("/api/orders/admin/paged"))).TotalCount);
+        Assert.Equal(24, (await Read<List<OrderResponse>>(await customer.GetAsync("/api/orders"))).Count);
+    }
+
+    [Fact]
+    public async Task Order_page_dates_use_Philippine_midnight_and_exclude_the_next_day()
+    {
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<FoodJsDbContext>();
+            var pending = await db.OrderStatuses.SingleAsync(status => status.Name == "Pending");
+            foreach (var instant in new[] { "2026-11-20T15:59:59Z", "2026-11-20T16:00:00Z", "2026-11-21T23:59:59.999+08:00", "2026-11-21T16:00:00Z" })
+                db.Orders.Add(new Order { UserId = customerId, CustomerName = "Date recipient", OrderStatusId = pending.Id, CreatedAt = DateTimeOffset.Parse(instant) });
+            await db.SaveChangesAsync();
+        }
+        var result = await Read<OrderPageResponse>(await admin.GetAsync("/api/orders/admin/paged?fromDate=2026-11-21&toDate=2026-11-21&status=Pending&search=dAtE"));
+        Assert.Equal(2, result.TotalCount);
+        Assert.All(result.Items, order => Assert.Equal(21, order.CreatedAt.ToOffset(TimeSpan.FromHours(8)).Day));
+    }
+
+    [Fact]
+    public async Task Admin_details_include_saved_contacts_items_and_history_without_opening_customer_access()
+    {
+        var order = await CreateOrder();
+        var details = await Read<OrderResponse>(await admin.GetAsync($"/api/orders/admin/{order.Id}"));
+        Assert.Equal(order.CustomerName, details.CustomerName); Assert.Equal(order.MobileNumber, details.MobileNumber);
+        Assert.Equal(order.Address, details.Address); Assert.Equal(order.Items, details.Items); Assert.Single(details.StatusHistory);
+        Assert.Equal(HttpStatusCode.Forbidden, (await customer.GetAsync($"/api/orders/admin/{order.Id}")).StatusCode);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.GetAsync("/api/orders/admin/paged")).StatusCode);
+        Assert.Equal(HttpStatusCode.Forbidden, (await customer.GetAsync("/api/orders/admin/paged")).StatusCode);
+        Assert.Equal(HttpStatusCode.NotFound, (await otherCustomer.GetAsync($"/api/orders/{order.Id}")).StatusCode);
+        await Error(await admin.GetAsync("/api/orders/admin/O-999999"), HttpStatusCode.NotFound);
+    }
+
+    [Fact]
+    public async Task Order_page_clamps_after_deletion_and_empty_search_has_consistent_metadata()
+    {
+        for (var index = 0; index < 11; index++) await CreateOrder();
+        var last = await Read<OrderPageResponse>(await admin.GetAsync("/api/orders/admin/paged?page=2"));
+        await admin.DeleteAsync($"/api/orders/{Assert.Single(last.Items).Id}");
+        var clamped = await Read<OrderPageResponse>(await admin.GetAsync("/api/orders/admin/paged?page=2"));
+        Assert.Equal(1, clamped.Page); Assert.Equal(10, clamped.Items.Count);
+        var empty = await Read<OrderPageResponse>(await customer.GetAsync("/api/orders/paged?search=no-such-order&page=99"));
+        Assert.Empty(empty.Items); Assert.Equal(0, empty.TotalCount); Assert.Equal(1, empty.Page);
+    }
+
+    [Theory]
+    [InlineData("page=0")]
+    [InlineData("pageSize=51")]
+    [InlineData("pageSize=0")]
+    [InlineData("status=Unknown")]
+    [InlineData("fromDate=2026-11-22&toDate=2026-11-21")]
+    [InlineData("fromDate=invalid")]
+    public async Task Invalid_order_page_queries_return_a_message(string query) =>
+        await Error(await admin.GetAsync($"/api/orders/admin/paged?{query}"), HttpStatusCode.BadRequest);
+
     private HttpClient ClientFor(int id, string role)
     {
         var client = factory.CreateClient();

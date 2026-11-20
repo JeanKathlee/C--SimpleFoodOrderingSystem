@@ -1,4 +1,5 @@
 import { useId } from "react";
+import "./Pagination.css";
 
 export default function Pagination({ page, pageSize, totalCount, totalPages, onPageChange, onPageSizeChange, disabled = false, label = "Items" }) {
   const sizeId = useId();
@@ -6,9 +7,10 @@ export default function Pagination({ page, pageSize, totalCount, totalPages, onP
   const last = Math.min(page * pageSize, totalCount);
   const start = Math.max(1, Math.min(page - 2, totalPages - 4));
   const pages = Array.from({ length: Math.min(5, totalPages) }, (_, i) => start + i);
+  const resultLabel = totalCount === 1 && label.endsWith("s") ? label.slice(0, -1) : label;
   return (
     <nav className="list-pagination" aria-label={`${label} pagination`}>
-      <p aria-live="polite">{first}–{last} of {totalCount} {label.toLowerCase()}</p>
+      <p aria-live="polite">{first}–{last} of {totalCount} {resultLabel.toLowerCase()}</p>
       <div className="pagination-size"><label htmlFor={sizeId}>Per page</label>
         <select id={sizeId} value={pageSize} disabled={disabled} onChange={e => onPageSizeChange(Number(e.target.value))}>
           {[10, 20, 50].map(size => <option key={size} value={size}>{size}</option>)}

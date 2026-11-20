@@ -1,7 +1,8 @@
 import { useEffect, useId, useRef, useState } from "react";
+import "./ConfirmModal.css";
 
 export default function ConfirmModal({ open, title, message, confirmLabel, cancelLabel = "Cancel",
-  hideCancel = false, confirmVariant = "danger", onCancel, onConfirm }) {
+  hideCancel = false, hideConfirm = false, dialogClassName = "", children, confirmVariant = "danger", onCancel, onConfirm }) {
   const dialogRef = useRef(null);
   const [pending, setPending] = useState(false);
   const [error, setError] = useState("");
@@ -48,15 +49,16 @@ export default function ConfirmModal({ open, title, message, confirmLabel, cance
   };
   return (
     <div className="admin-modal-backdrop" role="presentation" onClick={() => { if (!pending) onCancel(); }}>
-      <div ref={dialogRef} className="admin-modal" role="dialog" tabIndex={-1} aria-modal="true"
+      <div ref={dialogRef} className={`admin-modal ${dialogClassName}`} role="dialog" tabIndex={-1} aria-modal="true"
         aria-labelledby={titleId} aria-describedby={messageId} aria-busy={pending}
         onKeyDown={handleKeys} onClick={event => event.stopPropagation()}>
         <h3 id={titleId}>{title}</h3><p id={messageId}>{message}</p>
+        {children}
         {error && <p className="menu-error" role="alert">{error}</p>}
         <div className="admin-modal-actions">
           {!hideCancel && <button type="button" className="admin-btn admin-btn-light" disabled={pending} onClick={onCancel}>{cancelLabel}</button>}
-          <button type="button" className={`admin-btn admin-btn-${confirmVariant}`} disabled={pending} onClick={confirm}>
-            {pending ? "Please wait…" : confirmLabel}</button>
+          {!hideConfirm && <button type="button" className={`admin-btn admin-btn-${confirmVariant}`} disabled={pending} onClick={confirm}>
+            {pending ? "Please wait…" : confirmLabel}</button>}
         </div>
       </div>
     </div>

@@ -1,321 +1,97 @@
-import { useEffect, useState } from "react";
-import { useNavigate, useParams } from "react-router-dom";
-import { formatPrice } from "../data/menuItems";
-import { getAuthSession } from "../lib/auth";
-import { cartItemKey } from "../lib/cartItems";
-import { useNotification } from "../hooks/useNotification";
+import { useEffect, useRef, useState } from "react";
+import { Link, useParams } from "react-router-dom";
+import { orderDate, orderRequest } from "../lib/orders";
+import OrderDetailsContent from "../components/OrderDetailsContent";
+import ConfirmModal from "../components/admin/ConfirmModal";
+import "../orders.css";
 
 export default function OrderTracking() {
-  const navigate = useNavigate();
-  const { success, error: errorNotif } = useNotification();
   const { orderId } = useParams();
   const [order, setOrder] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [error, setError] = useState("");
+  const [revision, setRevision] = useState(0);
   const [orderNotifications, setOrderNotifications] = useState([]);
+  const [noticesError, setNoticesError] = useState("");
   const [noticesLoading, setNoticesLoading] = useState(true);
+  const [markingRead, setMarkingRead] = useState(false);
   const [cancelConfirmOpen, setCancelConfirmOpen] = useState(false);
-
-  const loadOrder = async () => {
-    try {
-      const session = getAuthSession();
-      const token = session?.token;
-      
-      if (!token || !orderId) {
-        navigate("/menu");
-        return;
-      }
-
-      const response = await fetch(`/api/orders/${orderId}`, {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        setOrder(data);
-      } else {
-        navigate("/menu");
-      }
-    } catch (err) {
-      console.error("Failed to load order:", err);
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const loadNotifications = async () => {
-    try {
-      const session = getAuthSession();
-      const token = session?.token;
-
-      if (!token) {
-        return;
-      }
-
-      const response = await fetch("/api/notifications", {
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (response.ok) {
-        const data = await response.json();
-        const notifications = Array.isArray(data)
-          ? data.filter((notice) => notice.orderId === orderId)
-          : [];
-        setOrderNotifications(notifications);
-      }
-    } catch (err) {
-      console.error("Failed to load notifications:", err);
-    } finally {
-      setNoticesLoading(false);
-    }
-  };
-
+  const [cancelling, setCancelling] = useState(false);
+  const [notice, setNotice] = useState("");
+  const cancelLock = useRef(false);
+  const readController = useRef(null);
+  const displayedId = useRef(orderId);
   useEffect(() => {
-    loadOrder();
-    loadNotifications();
-    
-    // matic update every5 seconds
-    const interval = setInterval(() => {
-      loadOrder();
-      loadNotifications();
-    }, 5000);
-    
-    return () => clearInterval(interval);
-    // Reload only when the tracked order or navigation context changes.
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [orderId, navigate]);
-
-  const confirmCancelOrder = async () => {
+    let disposed = false;
+    if (displayedId.current !== orderId) { setOrder(null); setLoading(true); setNotice(""); setCancelConfirmOpen(false); displayedId.current = orderId; }
+    const load = async () => {
+      if (cancelLock.current) return;
+      setLoading(true);
+      readController.current?.abort(); const controller = new AbortController(); readController.current = controller;
+      try {
+        const body = await orderRequest(`/api/orders/${encodeURIComponent(orderId)}`, { signal: controller.signal });
+        if (!body.id || !Array.isArray(body.items)) throw new Error("The order response was incomplete. Please retry.");
+        if (!disposed && !controller.signal.aborted) { setOrder(body); setError(""); }
+      } catch (failure) { if (!disposed && !controller.signal.aborted) setError(failure.message); }
+      finally { if (!disposed && !controller.signal.aborted) setLoading(false); }
+    };
+    load(); const timer = setInterval(load, 5000);
+    return () => { disposed = true; readController.current?.abort(); clearInterval(timer); };
+  }, [orderId, revision]);
+  useEffect(() => {
+    let controller; let disposed = false;
+    setOrderNotifications([]); setNoticesLoading(true);
+    const load = async () => {
+      controller?.abort(); controller = new AbortController(); const signal = controller.signal;
+      try {
+        const body = await orderRequest("/api/notifications", { signal });
+        if (!disposed && !signal.aborted) { setOrderNotifications(Array.isArray(body) ? body.filter(item => item.orderId === orderId) : []); setNoticesError(""); }
+      } catch (_failure) { if (!disposed && !signal.aborted) setNoticesError("Status notifications are currently unavailable."); }
+      finally { if (!disposed && !signal.aborted) setNoticesLoading(false); }
+    };
+    load(); const timer = setInterval(load, 10000);
+    return () => { disposed = true; controller?.abort(); clearInterval(timer); };
+  }, [orderId]);
+  const canCancel = order && ["Pending", "Preparing"].includes(order.status);
+  const confirmCancel = async () => {
+    if (cancelLock.current) return;
+    if (!canCancel || error) throw new Error("This order cannot be cancelled from its current state. Refresh the order first.");
+    cancelLock.current = true; setCancelling(true); readController.current?.abort(); setNotice("");
     try {
-      const session = getAuthSession();
-      const token = session?.token;
-
-      const response = await fetch(`/api/orders/${orderId}/cancel`, {
-        method: "PATCH",
-        headers: { Authorization: `Bearer ${token}` },
-      });
-
-      if (response.ok) {
-        const updated = await response.json();
-        setOrder(updated);
-        setCancelConfirmOpen(false);
-        success("Order cancelled successfully!");
-      } else {
-        const error = await response.json();
-        setCancelConfirmOpen(false);
-        errorNotif(error.message || "Failed to cancel order");
-      }
-    } catch (err) {
-      console.error("Error cancelling order:", err);
-      setCancelConfirmOpen(false);
-      errorNotif("Error: " + err.message);
-    }
+      const body = await orderRequest(`/api/orders/${encodeURIComponent(orderId)}/cancel`, { method: "PATCH" });
+      setOrder(body); setCancelConfirmOpen(false); setNotice("Your order was cancelled."); setError(""); setLoading(false);
+    } catch (failure) { setRevision(value => value + 1); throw failure; }
+    finally { cancelLock.current = false; setCancelling(false); }
   };
-
-  const canCancel = order && (order.status === "Pending" || order.status === "Preparing");
-  const statusSteps = ["Pending", "Preparing", "Ready", "Delivered"];
-  const currentStatusIndex = Math.max(
-    0,
-    statusSteps.indexOf(order?.status || "Pending")
-  );
-  const unreadNotifications = orderNotifications.filter((notice) => !notice.read);
-
-  const markOrderNotificationsRead = async () => {
-    if (unreadNotifications.length === 0) {
-      return;
-    }
-
+  const unread = orderNotifications.filter(item => !item.read);
+  const markRead = async () => {
+    if (markingRead) return;
+    setMarkingRead(true);
     try {
-      const session = getAuthSession();
-      const token = session?.token;
-
-      await Promise.all(
-        unreadNotifications.map((notice) =>
-          fetch(`/api/notifications/${notice.id}/read`, {
-            method: "PATCH",
-            headers: { Authorization: `Bearer ${token}` },
-          })
-        )
-      );
-
-      setOrderNotifications((prev) =>
-        prev.map((notice) =>
-          unreadNotifications.some((unread) => unread.id === notice.id)
-            ? { ...notice, read: true }
-            : notice
-        )
-      );
-    } catch (err) {
-      console.error("Failed to mark notifications as read:", err);
-    }
+      await Promise.all(unread.map(item => orderRequest(`/api/notifications/${item.id}/read`, { method: "PATCH" })));
+      setOrderNotifications(current => current.map(item => ({ ...item, read: true }))); setNoticesError("");
+    } catch (_failure) { setNoticesError("Could not mark notifications as read. Please retry."); }
+    finally { setMarkingRead(false); }
   };
-
-  if (loading) {
-    return <div className="page-loading">Loading...</div>;
-  }
-
-  if (!order) {
-    return <div className="page-loading">Order not found</div>;
-  }
-
-  return (
-    <div className="client-page tracking-page">
-      <div className="client-shell">
-        <header className="page-topbar">
-          <div>
-            <h1>Order Tracking</h1>
-            <p>Order ID: {order.id}</p>
-          </div>
-          <div className="page-actions">
-            <button className="client-btn ghost" onClick={() => navigate("/menu")}>← Back</button>
-            <button className="client-btn ghost" onClick={() => navigate("/menu")}>Home</button>
-          </div>
-        </header>
-
-        <div className="tracking-layout">
-          <section className="panel-card">
-            <div className="status-track">
-              {statusSteps.map((step, index) => (
-                <div key={step} className={`status-step ${index <= currentStatusIndex ? "active" : ""}`}>
-                  <div className="status-dot">
-                    {index <= currentStatusIndex ? "✓" : index + 1}
-                  </div>
-                  <span>{step}</span>
-                </div>
-              ))}
-              <div className="status-bar">
-                <div
-                  className="status-bar-fill"
-                  style={{ width: `${(currentStatusIndex / (statusSteps.length - 1)) * 100}%` }}
-                />
-              </div>
-            </div>
-
-            <div className="tracking-status-card">
-              <div>
-                <p>Current Status</p>
-                <h2>{order.status}</h2>
-              </div>
-              <span className={`status-pill ${order.status.toLowerCase()}`}>{order.status}</span>
-            </div>
-
-            <div className="tracking-details">
-              <div>
-                <span>Customer</span>
-                <strong>{order.customerName}</strong>
-              </div>
-              <div>
-                <span>Payment</span>
-                <strong>{order.paymentMethod}</strong>
-              </div>
-              <div>
-                <span>Placed</span>
-                <strong>{new Date(order.createdAt).toLocaleString()}</strong>
-              </div>
-            </div>
-
-            <div className="order-items">
-              <h3>Items</h3>
-              {order.items.map((item) => (
-                <div key={cartItemKey(item)} className="order-item-row">
-                  <div>
-                    <strong>{item.name}</strong>
-                    {item.selectedChoice && <p>{item.selectedChoice}</p>}
-                    <p>Qty: {item.quantity}</p>
-                  </div>
-                  <span>{formatPrice(item.price * item.quantity)}</span>
-                </div>
-              ))}
-            </div>
-
-            <div className="order-total-row">
-              <span>Total</span>
-              <strong>{formatPrice(order.total)}</strong>
-            </div>
-
-            {canCancel && (
-              <button className="client-btn danger" onClick={() => setCancelConfirmOpen(true)}>
-                Cancel Order
-              </button>
-            )}
-          </section>
-
-          <aside className="panel-card tracking-sidebar">
-            <div className="tracking-sidebar-header">
-              <h3>Status Notifications</h3>
-              <button
-                type="button"
-                className="client-btn ghost"
-                onClick={markOrderNotificationsRead}
-                disabled={unreadNotifications.length === 0}
-              >
-                Mark all read
-              </button>
-            </div>
-
-            {noticesLoading ? (
-              <p className="muted-text">Loading notifications...</p>
-            ) : orderNotifications.length === 0 ? (
-              <p className="muted-text">No status updates yet.</p>
-            ) : (
-              <div className="notification-list">
-                {orderNotifications.map((notice) => (
-                  <div key={notice.id} className={`notification-item ${notice.read ? "" : "unread"}`}>
-                    <div>
-                      <strong>{notice.title}</strong>
-                      <p>{notice.message}</p>
-                    </div>
-                    <span>{new Date(notice.createdAt).toLocaleTimeString()}</span>
-                  </div>
-                ))}
-              </div>
-            )}
-
-            <div className="tracking-actions">
-              <button className="client-btn ghost" onClick={() => navigate("/order-history")}>
-                View All Orders
-              </button>
-            </div>
-          </aside>
-        </div>
-      </div>
-
-      {cancelConfirmOpen && (
-        <div
-          className="client-modal-backdrop"
-          role="presentation"
-          onClick={() => setCancelConfirmOpen(false)}
-        >
-          <div
-            className="client-confirm-modal"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="cancel-order-title"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <span className="client-modal-kicker">Cancel order</span>
-            <h2 id="cancel-order-title">Cancel this order?</h2>
-            <p>
-              Order {order.id} will be marked as cancelled. You can place a new order from the menu anytime.
-            </p>
-            <div className="client-modal-summary">
-              <span>Total</span>
-              <strong>{formatPrice(order.total)}</strong>
-            </div>
-            <div className="client-modal-actions">
-              <button
-                type="button"
-                className="client-btn ghost"
-                onClick={() => setCancelConfirmOpen(false)}
-              >
-                Keep Order
-              </button>
-              <button type="button" className="client-btn danger" onClick={confirmCancelOrder}>
-                Yes, Cancel
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
-    </div>
-  );
+  const steps = ["Pending", "Preparing", "Ready", "Delivered"];
+  const currentStep = steps.indexOf(order?.status);
+  return <div className="client-page tracking-page"><div className="client-shell">
+    <header className="page-topbar"><div><h1>Order Tracking</h1><p>Order {orderId} · Philippine time (UTC+8)</p></div><Link className="client-btn ghost" to="/order-history">Back to orders</Link></header>
+    {loading && !order && <p role="status" className="panel-card">Loading order…</p>}
+    {error && <div className="order-notice" role="alert"><p>{error}{order ? " Previously loaded details remain visible." : ""}</p><button type="button" disabled={cancelling || loading} onClick={() => setRevision(value => value + 1)}>Retry order</button></div>}
+    {notice && <p className="order-success" role="status">{notice}</p>}
+    {order && <div className="tracking-layout"><section className="panel-card">
+      {order.status === "Cancelled" ? <div className="order-cancelled-banner" role="status"><strong>Order cancelled</strong><p>This order is no longer being prepared or delivered.</p></div> : <div className="status-track" aria-label={`Order progress: ${order.status}`}>
+        {steps.map((step, index) => <div key={step} aria-current={index === currentStep ? "step" : undefined} className={`status-step ${index <= currentStep ? "active" : ""}`}><div className="status-dot" aria-hidden="true">{index <= currentStep ? "✓" : index + 1}</div><span>{step}</span></div>)}
+        <div className="status-bar"><div className="status-bar-fill" style={{ width: `${Math.max(0, currentStep) / (steps.length - 1) * 100}%` }} /></div>
+      </div>}
+      <OrderDetailsContent order={order} />
+      {canCancel && <button type="button" className="client-btn danger" disabled={cancelling || loading || !!error} onClick={() => setCancelConfirmOpen(true)}>Cancel order</button>}
+    </section><aside className="panel-card tracking-sidebar"><div className="tracking-sidebar-header"><h3>Recent status notifications</h3><button type="button" className="client-btn ghost" disabled={!unread.length || markingRead} onClick={markRead}>{markingRead ? "Updating…" : "Mark all read"}</button></div>
+      {noticesError && <p role="status">{noticesError}</p>}
+      {noticesLoading ? <p>Loading notifications…</p> : !orderNotifications.length && !noticesError ? <p>No status notifications yet.</p> : <div className="notification-list">{orderNotifications.slice(0, 5).map(item => <div key={item.id} className={`notification-item ${item.read ? "" : "unread"}`}><div><strong>{item.title}</strong><p>{item.message}</p></div><span>{orderDate(item.createdAt)}</span></div>)}</div>}
+      <div className="tracking-actions"><Link className="client-btn ghost" to="/order-history">View all orders</Link></div>
+    </aside></div>}
+    <ConfirmModal open={cancelConfirmOpen} title="Cancel this order?" message={`Order ${orderId} will be marked as Cancelled. This cannot be undone.`} cancelLabel="Keep order" confirmLabel="Yes, cancel order" onCancel={() => setCancelConfirmOpen(false)} onConfirm={confirmCancel} />
+  </div></div>;
 }
