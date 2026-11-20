@@ -124,6 +124,11 @@ export default function Dashboard() {
   const [activeSection, setActiveSection] = useState("dashboard");
   const [categories, setCategories] = useState([]);
   const [menuItems, setMenuItems] = useState([]);
+  const [menuRevision, setMenuRevision] = useState(0);
+  const [menuCategories, setMenuCategories] = useState([]);
+  const [menuDraft, setMenuDraft] = useState({ dirty: false, busy: false });
+  const [menuCategoryLoading, setMenuCategoryLoading] = useState(true);
+  const [menuCategoryError, setMenuCategoryError] = useState("");
   const [coupons, setCoupons] = useState([]);
   const [allOrders, setAllOrders] = useState([]);
   const [weeklyRevenue, setWeeklyRevenue] = useState(DEFAULT_WEEKLY_REVENUE);
@@ -193,6 +198,17 @@ export default function Dashboard() {
     } catch (_error) {
       setSyncLabel("Live sync unavailable");
     }
+  };
+
+  const loadMenuCategories = async () => {
+    try {
+      const response = await fetch(import.meta.env.VITE_MENU_CATEGORY_URL || "/api/categories");
+      if (!response.ok) throw new Error("Could not load menu categories. Please retry.");
+      const data = await response.json();
+      if (!Array.isArray(data)) throw new Error("The categories response was incomplete.");
+      setMenuCategories(data); setMenuCategoryError("");
+    } catch (error) { setMenuCategoryError(error.message); }
+    finally { setMenuCategoryLoading(false); }
   };
 
   const loadAllOrders = async () => {
@@ -272,6 +288,11 @@ export default function Dashboard() {
   };
 
   useEffect(() => {
+    if (activeSection === "menu") {
+      loadMenuCategories();
+      const menuPollingId = setInterval(loadMenuCategories, 15000);
+      return () => clearInterval(menuPollingId);
+    }
     loadAdminData();
     loadAllOrders();
     const pollingId = setInterval(() => {
@@ -282,7 +303,7 @@ export default function Dashboard() {
     return () => clearInterval(pollingId);
     // The loaders intentionally retain the authenticated session captured on mount.
     // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+  }, [activeSection]);
 
   const filteredAdminOrders = useMemo(() => {
     const customerFilter = filters.customer.trim().toLowerCase();
@@ -361,16 +382,17 @@ export default function Dashboard() {
 
       if (!response.ok) {
         const error = await response.json();
-        errorNotif(error?.message || "Failed to add menu item");
-        return;
+        return { ok: false, message: error?.message || "Failed to add menu item" };
       }
 
       const newItem = await response.json();
       setMenuItems((current) => [newItem, ...current]);
       success("Menu item added successfully!");
       bumpSyncState("menu");
+      setMenuRevision(value => value + 1);
+      return { ok: true };
     } catch (err) {
-      errorNotif("Error adding menu item");
+      return { ok: false, message: "Could not connect to save the item. Please retry." };
     }
   };
 
@@ -388,8 +410,7 @@ export default function Dashboard() {
 
       if (!response.ok) {
         const error = await response.json();
-        errorNotif(error?.message || "Failed to update menu item");
-        return;
+        return { ok: false, message: error?.message || "Failed to update menu item" };
       }
 
       const updatedItem = await response.json();
@@ -398,16 +419,19 @@ export default function Dashboard() {
       );
       success("Menu item updated successfully!");
       bumpSyncState("menu");
+      setMenuRevision(value => value + 1);
+      return { ok: true };
     } catch (err) {
-      errorNotif("Error updating menu item");
+      return { ok: false, message: "Could not connect to save your changes. Please retry." };
     }
   };
 
-  const handleDeleteMenuItem = (id) => {
+  const handleDeleteMenuItem = (item, onDeleted) => {
+    const id = item.id;
     setModalConfig({
       open: true,
       title: "Delete menu item",
-      message: "This action removes the item from the menu list.",
+      message: `Delete “${item.name}”? This permanently removes it from the menu. Items used in existing orders must be marked unavailable instead.`,
       confirmLabel: "Delete Item",
       onConfirm: async () => {
         try {
@@ -421,20 +445,35 @@ export default function Dashboard() {
 
           if (!response.ok) {
             const error = await response.json();
-            errorNotif(error?.message || "Failed to delete menu item");
-            return;
+            throw new Error(error?.message || "Failed to delete menu item");
           }
 
           setMenuItems((current) => current.filter((item) => item.id !== id));
           setModalConfig((current) => ({ ...current, open: false }));
           success("Menu item deleted successfully!");
           bumpSyncState("menu");
+          setMenuRevision(value => value + 1);
+          onDeleted?.();
         } catch (err) {
-          errorNotif("Error deleting menu item");
-          setModalConfig((current) => ({ ...current, open: false }));
+          throw new Error(err.message || "Could not delete the menu item. Please retry.");
         }
       },
     });
+  };
+
+  const handleSetMenuAvailability = async (id, isAvailable) => {
+    try {
+      const response = await fetch(`/api/menu/${id}/availability`, {
+        method: "PATCH", headers: { "Content-Type": "application/json", Authorization: `Bearer ${session?.token}` },
+        body: JSON.stringify({ isAvailable }),
+      });
+      const data = await response.json();
+      if (!response.ok) return { ok: false, message: data.message || "Could not update availability." };
+      setMenuItems(current => current.map(item => item.id === id ? data : item));
+      setMenuRevision(value => value + 1);
+      success(isAvailable ? "Item is now available." : "Item marked unavailable.");
+      return { ok: true };
+    } catch (_error) { return { ok: false, message: "Could not connect to update availability. Please retry." }; }
   };
 
   const handleAddCategory = async (payload) => {
@@ -652,15 +691,26 @@ export default function Dashboard() {
     setModalConfig((current) => ({ ...current, open: false }));
   };
 
+  const handleSectionChange = section => {
+    if (section === activeSection || menuDraft.busy) return;
+    if (activeSection === "menu" && menuDraft.dirty) {
+      setModalConfig({ open: true, title: "Leave Menu Management?", message: "Your menu draft has not been saved. Discard it to leave this page?",
+        confirmLabel: "Discard changes", onConfirm: () => { setActiveSection(section); closeModal(); } });
+    } else setActiveSection(section);
+  };
+
   return (
-    <div className="admin-layout">
-      <AdminSidebar activeSection={activeSection} onSectionChange={setActiveSection} />
+    <div className={`admin-layout ${activeSection === "menu" ? "admin-menu-view" : ""}`}>
+      <AdminSidebar activeSection={activeSection} onSectionChange={handleSectionChange} disabled={menuDraft.busy} />
 
       <main className="admin-main">
         <AdminTopbar
           onLogout={handleLogout}
           adminName={session?.user?.name || "Admin"}
-          syncLabel={syncLabel}
+          syncLabel={activeSection === "menu" ? null : syncLabel}
+          title={activeSection === "menu" ? "Menu Management" : undefined}
+          subtitle={activeSection === "menu" ? "Manage your items, prices, and availability." : undefined}
+          disabled={menuDraft.busy}
         />
 
         {activeSection === "dashboard" && (
@@ -713,11 +763,16 @@ export default function Dashboard() {
 
         {activeSection === "menu" && (
           <MenuManagement
-            categories={categories}
-            menuItems={menuItems}
+            categories={menuCategories}
+            categoryLoading={menuCategoryLoading}
+            categoryError={menuCategoryError}
+            onRetryCategories={() => { setMenuCategoryLoading(true); loadMenuCategories(); }}
+            revision={menuRevision}
+            onDraftChange={setMenuDraft}
             onAddMenuItem={handleAddMenuItem}
             onUpdateMenuItem={handleUpdateMenuItem}
             onDeleteMenuItem={handleDeleteMenuItem}
+            onSetAvailability={handleSetMenuAvailability}
           />
         )}
 
@@ -744,7 +799,7 @@ export default function Dashboard() {
       <ConfirmModal
         open={logoutConfirm}
         title="Confirm Logout"
-        message="Are you sure you want to logout?"
+        message={menuDraft.dirty ? "Your menu draft has not been saved. Logging out will discard it. Continue?" : "Are you sure you want to logout?"}
         confirmLabel="Logout"
         onCancel={() => setLogoutConfirm(false)}
         onConfirm={confirmLogout}

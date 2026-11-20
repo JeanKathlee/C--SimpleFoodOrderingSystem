@@ -277,6 +277,95 @@ public sealed class AssignedApiFlowTests : IAsyncLifetime
             HttpStatusCode.BadRequest);
     }
 
+    [Fact]
+    public async Task Menu_paging_is_bounded_stable_and_keeps_the_existing_array_contract()
+    {
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<FoodJsDbContext>();
+            db.MenuItems.AddRange(Enumerable.Range(0, 24).Select(index => new MenuItem
+            {
+                Name = $"Paged item {index:D2}", Price = 199.50m, PrepTime = 10, CategoryId = categoryId
+            }));
+            await db.SaveChangesAsync();
+        }
+        var first = await Read<MenuPageResponse>(await anonymous.GetAsync("/api/menu/paged?page=1&pageSize=10"));
+        var second = await Read<MenuPageResponse>(await anonymous.GetAsync("/api/menu/paged?page=2&pageSize=10"));
+        var last = await Read<MenuPageResponse>(await anonymous.GetAsync("/api/menu/paged?page=3&pageSize=10"));
+        Assert.Equal(25, first.TotalCount);
+        Assert.Equal(3, first.TotalPages);
+        Assert.Equal(10, first.Items.Count);
+        Assert.Equal(10, second.Items.Count);
+        Assert.Equal(5, last.Items.Count);
+        var ids = first.Items.Concat(second.Items).Concat(last.Items).Select(item => item.Id).ToList();
+        Assert.Equal(25, ids.Distinct().Count());
+        Assert.Equal(first.Items.Select(item => item.Id),
+            (await Read<MenuPageResponse>(await anonymous.GetAsync("/api/menu/paged?page=1&pageSize=10"))).Items.Select(item => item.Id));
+        Assert.Equal(25, (await Read<List<MenuItemResponse>>(await anonymous.GetAsync("/api/menu"))).Count);
+    }
+
+    [Fact]
+    public async Task Menu_page_filters_search_description_category_and_availability_together()
+    {
+        int sidesId;
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<FoodJsDbContext>();
+            var sides = new Category { Name = "Sides" };
+            db.MenuItems.AddRange(
+                new MenuItem { Name = "Salad", Description = "VEGAN dressing", Price = 80m, PrepTime = 5, Category = sides, IsAvailable = false },
+                new MenuItem { Name = "Other salad", Description = "Vegan dressing", Price = 85m, PrepTime = 5, Category = sides, IsAvailable = true },
+                new MenuItem { Name = "Vegan burger", Price = 100m, PrepTime = 10, CategoryId = categoryId, IsAvailable = false });
+            await db.SaveChangesAsync();
+            sidesId = sides.Id;
+        }
+        var result = await Read<MenuPageResponse>(await anonymous.GetAsync(
+            $"/api/menu/paged?search=%20vEgAn%20&categoryId={PublicId.Category(sidesId)}&isAvailable=false&pageSize=10"));
+        Assert.Equal(1, result.TotalCount);
+        Assert.Equal("Salad", Assert.Single(result.Items).Name);
+        Assert.False(Assert.Single(result.Items).IsAvailable);
+    }
+
+    [Fact]
+    public async Task Menu_paging_clamps_after_the_only_item_on_the_last_page_is_deleted()
+    {
+        using (var scope = factory.Services.CreateScope())
+        {
+            var db = scope.ServiceProvider.GetRequiredService<FoodJsDbContext>();
+            db.MenuItems.AddRange(Enumerable.Range(0, 10).Select(index => new MenuItem
+            {
+                Name = $"Last page {index:D2}", Price = 50m, PrepTime = 5, CategoryId = categoryId
+            }));
+            await db.SaveChangesAsync();
+        }
+        var before = await Read<MenuPageResponse>(await anonymous.GetAsync("/api/menu/paged?page=2&pageSize=10"));
+        var last = Assert.Single(before.Items);
+        Assert.Equal(HttpStatusCode.OK, (await admin.DeleteAsync($"/api/menu/{last.Id}")).StatusCode);
+        var after = await Read<MenuPageResponse>(await anonymous.GetAsync("/api/menu/paged?page=2&pageSize=10"));
+        Assert.Equal(1, after.Page);
+        Assert.Equal(10, after.Items.Count);
+        Assert.Equal(1, after.TotalPages);
+    }
+
+    [Fact]
+    public async Task Empty_menu_search_has_consistent_pagination_metadata()
+    {
+        var page = await Read<MenuPageResponse>(await anonymous.GetAsync("/api/menu/paged?search=does-not-exist&page=99"));
+        Assert.Empty(page.Items);
+        Assert.Equal(0, page.TotalCount);
+        Assert.Equal(1, page.Page);
+        Assert.Equal(1, page.TotalPages);
+    }
+
+    [Theory]
+    [InlineData("page=0")]
+    [InlineData("page=-1")]
+    [InlineData("pageSize=0")]
+    [InlineData("pageSize=51")]
+    [InlineData("categoryId=invalid")]
+    public async Task Menu_paging_rejects_invalid_bounds_and_ids(string query) =>
+        await Error(await anonymous.GetAsync($"/api/menu/paged?{query}"), HttpStatusCode.BadRequest);
+
     private HttpClient ClientFor(int id, string role)
     {
         var client = factory.CreateClient();

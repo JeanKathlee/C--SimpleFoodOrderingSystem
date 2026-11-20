@@ -10,6 +10,33 @@ public sealed class EfMenuService(FoodJsDbContext db) : IMenuService
     private const int MaxNameLength = 120;
     private const int MaxDescriptionLength = 2_000;
 
+    public async Task<MenuPageResponse> GetPageAsync(MenuPageRequest request, CancellationToken ct = default)
+    {
+        if (request.Page < 1 || request.PageSize is < 1 or > 50)
+            throw new ApiException(StatusCodes.Status400BadRequest, "Page must be positive and pageSize must be between 1 and 50.");
+        var query = db.MenuItems.AsNoTracking();
+        if (!string.IsNullOrWhiteSpace(request.CategoryId))
+        {
+            if (!PublicId.TryParseCategory(request.CategoryId, out var categoryId))
+                throw new ApiException(StatusCodes.Status400BadRequest, "Invalid categoryId.");
+            query = query.Where(item => item.CategoryId == categoryId);
+        }
+        if (request.IsAvailable is { } available)
+            query = query.Where(item => item.IsAvailable == available);
+        if (!string.IsNullOrWhiteSpace(request.Search))
+        {
+            var search = request.Search.Trim().ToLower();
+            query = query.Where(item => item.Name.ToLower().Contains(search) || item.Description.ToLower().Contains(search));
+        }
+        var count = await query.CountAsync(ct);
+        var totalPages = Math.Max(1, (int)Math.Ceiling(count / (double)request.PageSize));
+        var page = Math.Min(request.Page, totalPages);
+        var items = await query.Include(item => item.Category)
+            .OrderBy(item => item.Name).ThenBy(item => item.Id)
+            .Skip((page - 1) * request.PageSize).Take(request.PageSize).ToListAsync(ct);
+        return new(items.Select(ToResponse).ToList(), count, page, request.PageSize, totalPages);
+    }
+
     public async Task<IReadOnlyList<MenuItemResponse>> GetAllAsync(CancellationToken ct = default)
     {
         var items = await db.MenuItems

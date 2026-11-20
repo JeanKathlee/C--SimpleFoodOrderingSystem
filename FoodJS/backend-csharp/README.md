@@ -35,9 +35,21 @@ GET http://localhost:3001/api/health
 - `Program.cs` contains dependency registration and the HTTP middleware pipeline.
 - `appsettings*.json` contains safe, non-secret configuration.
 
-The Menu feature is the example to copy. It is intentionally in-memory so the
-template builds without database packages. Replace it with Entity Framework Core
-and PostgreSQL after the API contracts have been migrated.
+The Menu feature uses Entity Framework Core with SQLite and preserves the
+existing menu response contracts.
+
+## Menu Management pagination
+
+The admin Menu Management screen uses `GET /api/menu/paged`. It accepts `page`
+(default 1), `pageSize` (default 10, maximum 50), and optional `search`, `categoryId`,
+and `isAvailable` filters. Search matches item names and descriptions. The response
+contains `items`, `totalCount`, `page`, `pageSize`, and `totalPages`. Filtering,
+counting, and page selection happen in the database; items sort by name then ID.
+An out-of-range page is clamped to the last page, including after deletion.
+
+The existing `GET /api/menu` array response remains available for existing callers.
+The new admin screen requires this C# endpoint; the Express reference is unchanged.
+Category loading still depends on the category API owned by the assigned teammate.
 
 ## Checkout item choices
 
@@ -101,7 +113,7 @@ Test authentication is defined only inside the test project; users, roles,
 categories, and coupons are seeded as dependency data. This does not implement or
 verify teammate-owned authentication/profile/cart/category/coupon/notification APIs.
 Browser checkout summary/map behavior and full frontend-to-C# integration remain
-team acceptance checks once those APIs are available. The suite currently has 69
+team acceptance checks once those APIs are available. The suite currently has 78
 passing cases; PR approval and merging remain with the project lead.
 
 ## Suggested team ownership

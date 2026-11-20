@@ -1,12 +1,29 @@
 using FoodJS.Api.Common;
 using FoodJS.Api.Data;
+using FoodJS.Api.Development;
 using FoodJS.Api.Features.Menu;
 using FoodJS.Api.Features.Orders;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
+using Microsoft.AspNetCore.Authentication;
 
 var builder = WebApplication.CreateBuilder(args);
+var migrationBridge = builder.Configuration.GetValue<bool>("MigrationBridge:Enabled");
+if (migrationBridge && !builder.Environment.IsDevelopment())
+    throw new InvalidOperationException("The migration bridge is restricted to Development.");
+builder.Services.AddAuthentication();
+builder.Services.AddAuthorization();
+if (migrationBridge)
+{
+    var referenceUrl = new Uri(builder.Configuration["MigrationBridge:ReferenceApiUrl"] ?? "http://localhost:3001/");
+    if (!referenceUrl.IsLoopback || referenceUrl.Scheme != "http" || referenceUrl.AbsolutePath != "/")
+        throw new InvalidOperationException("MigrationBridge:ReferenceApiUrl must be an HTTP loopback origin.");
+    builder.Services.AddHttpClient<MigrationDependencies>(client => { client.BaseAddress = referenceUrl; client.Timeout = TimeSpan.FromSeconds(10); })
+        .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
+    builder.Services.AddAuthentication(MigrationAuthenticationHandler.SchemeName)
+        .AddScheme<AuthenticationSchemeOptions, MigrationAuthenticationHandler>(MigrationAuthenticationHandler.SchemeName, _ => { });
+}
 
 builder.Services.AddDbContext<FoodJsDbContext>(options =>
     options.UseSqlite(
@@ -65,6 +82,8 @@ using (var scope = app.Services.CreateScope())
     var db = scope.ServiceProvider.GetRequiredService<FoodJsDbContext>();
     await db.Database.MigrateAsync();
     await OrderStatusSeeder.EnsureSeededAsync(db);
+    if (migrationBridge)
+        await scope.ServiceProvider.GetRequiredService<MigrationDependencies>().InitializeAsync();
 }
 
 app.UseExceptionHandler();
@@ -74,6 +93,19 @@ app.UseCors("Frontend");
 // [Authorize] on the menu and order controllers needs it before it can authenticate requests.
 app.UseAuthentication();
 app.UseAuthorization();
+
+if (migrationBridge)
+{
+    app.Use(async (context, next) =>
+    {
+        if (context.Request.Method == "POST" && context.Request.Path == "/api/orders" && context.User.Identity?.IsAuthenticated == true)
+            await context.RequestServices.GetRequiredService<MigrationDependencies>().RefreshCouponsAsync(context.RequestAborted);
+        await next(context);
+    });
+    app.MapGet("/api/menu/dependencies/categories", async (MigrationDependencies dependencies, CancellationToken ct) =>
+        Results.Ok(await dependencies.CategoriesAsync(ct)));
+    app.Logger.LogWarning("Local migration bridge enabled: Menu/Orders use SQLite; identity and dependencies come from local Express. Do not deploy this profile.");
+}
 
 app.MapControllers();
 
