@@ -58,6 +58,8 @@ function normalizeMenu(items = [], categories = []) {
     return {
       id: String(item.id ?? `M-${1000 + index}`),
       name: item.name || "Unnamed Item",
+      description: item.description ?? "",
+      image: item.image ?? null,
       categoryId: item.categoryId || category?.id || categories[0]?.id || "",
       price: Number(item.price || 0),
       prepTime: Number(item.prepTime || 10),
