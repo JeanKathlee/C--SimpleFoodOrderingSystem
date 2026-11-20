@@ -47,6 +47,20 @@ function getNextUserId() {
   return maxId + 1;
 }
 
+function normalizeEmail(email) {
+  return String(email || '').trim().toLowerCase();
+}
+
+function isValidEmail(email) {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email);
+}
+
+function findDuplicateEmail(users, email, excludedId) {
+  return (users || []).find(
+    (user) => user.id !== excludedId && normalizeEmail(user.email) === normalizeEmail(email)
+  );
+}
+
 // POST method, Create new user account
 router.post('/register', async (req, res) => {
   const { email, password, firstName, lastName, mobileNumber, address } = req.body || {};
@@ -164,7 +178,7 @@ router.get('/me', verifyToken, (req, res) => {
 });
 
 router.patch('/me', verifyToken, (req, res) => {
-  const { firstName, lastName, mobileNumber, address, profileImage } = req.body || {};
+  const { firstName, lastName, email, mobileNumber, address, profileImage } = req.body || {};
   const data = readJsonFromData('users.json');
   const currentUser = (data.users || []).find((user) => user.id === req.user.sub);
 
@@ -186,6 +200,17 @@ router.patch('/me', verifyToken, (req, res) => {
       return res.status(400).json({ message: 'Last name cannot be empty.' });
     }
     currentUser.lastName = cleanLastName;
+  }
+
+  if (email !== undefined) {
+    const cleanEmail = normalizeEmail(email);
+    if (!cleanEmail || !isValidEmail(cleanEmail)) {
+      return res.status(400).json({ message: 'A valid email address is required.' });
+    }
+    if (findDuplicateEmail(data.users, cleanEmail, currentUser.id)) {
+      return res.status(400).json({ message: 'Email already in use.' });
+    }
+    currentUser.email = cleanEmail;
   }
 
   if (firstName !== undefined || lastName !== undefined) {
@@ -213,7 +238,7 @@ router.patch('/me', verifyToken, (req, res) => {
 });
 
 router.patch('/:id', verifyToken, requireAdmin, (req, res) => {
-  const { firstName, lastName, mobileNumber, address, profileImage } = req.body || {};
+  const { firstName, lastName, email, mobileNumber, address, profileImage } = req.body || {};
   const userId = Number(req.params.id);
   const data = readJsonFromData('users.json');
   const customer = (data.users || []).find((user) => user.id === userId);
@@ -236,6 +261,17 @@ router.patch('/:id', verifyToken, requireAdmin, (req, res) => {
       return res.status(400).json({ message: 'Last name cannot be empty.' });
     }
     customer.lastName = cleanLastName;
+  }
+
+  if (email !== undefined) {
+    const cleanEmail = normalizeEmail(email);
+    if (!cleanEmail || !isValidEmail(cleanEmail)) {
+      return res.status(400).json({ message: 'A valid email address is required.' });
+    }
+    if (findDuplicateEmail(data.users, cleanEmail, customer.id)) {
+      return res.status(400).json({ message: 'Email already in use.' });
+    }
+    customer.email = cleanEmail;
   }
 
   if (firstName !== undefined || lastName !== undefined) {

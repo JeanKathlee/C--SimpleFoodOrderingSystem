@@ -43,6 +43,7 @@ export default function CustomersPanel({
         ? {
             firstName: selectedCustomer.firstName || "",
             lastName: selectedCustomer.lastName || "",
+            email: selectedCustomer.email || "",
             mobileNumber: selectedCustomer.mobileNumber || "",
             address: selectedCustomer.address || "",
           }
@@ -150,6 +151,10 @@ export default function CustomersPanel({
                 <label>
                   <span>Last name</span>
                   <input name="lastName" value={form?.lastName || ""} onChange={handleFormChange} required />
+                </label>
+                <label>
+                  <span>Email</span>
+                  <input type="email" name="email" value={form?.email || ""} onChange={handleFormChange} required />
                 </label>
                 <label>
                   <span>Mobile number</span>
