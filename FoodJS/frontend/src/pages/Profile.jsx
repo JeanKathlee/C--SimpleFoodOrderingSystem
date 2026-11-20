@@ -132,6 +132,7 @@ export default function Profile() {
         body: JSON.stringify({
           firstName: profile.firstName,
           lastName: profile.lastName,
+          email: profile.email,
           mobileNumber: profile.mobileNumber,
           address: profile.address,
           profileImage: profile.profileImage,
@@ -227,7 +228,13 @@ export default function Profile() {
 
               <label>
                 <span>Email</span>
-                <input type="email" value={profile.email} readOnly />
+                <input
+                  type="email"
+                  name="email"
+                  value={profile.email}
+                  onChange={handleInputChange}
+                  required
+                />
               </label>
 
               <label>
