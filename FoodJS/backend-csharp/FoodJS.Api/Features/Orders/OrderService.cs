@@ -53,13 +53,13 @@ public sealed class OrderService(FoodJsDbContext db) : IOrderService
 
         // 1. Price every line from the menu, never from the client.
         var quantities = MergeLines(request.Items);
-        var menuIds = quantities.Keys.ToList();
+        var menuIds = quantities.Keys.Select(key => key.MenuId).Distinct().ToList();
         var menuItems = await db.MenuItems
             .Where(item => menuIds.Contains(item.Id))
             .ToDictionaryAsync(item => item.Id, ct);
 
-        var lines = new List<(MenuItem Item, int Quantity, decimal LineTotal)>();
-        foreach (var (menuId, quantity) in quantities)
+        var lines = new List<(MenuItem Item, string? Choice, int Quantity, decimal UnitPrice, decimal LineTotal)>();
+        foreach (var ((menuId, choice), quantity) in quantities)
         {
             if (!menuItems.TryGetValue(menuId, out var item))
             {
@@ -75,7 +75,8 @@ public sealed class OrderService(FoodJsDbContext db) : IOrderService
                     $"{item.Name} is currently unavailable.");
             }
 
-            lines.Add((item, quantity, Math.Round(item.Price * quantity, 2)));
+            var unitPrice = item.Price + ItemChoiceRules.GetAddOnPrice(choice);
+            lines.Add((item, choice, quantity, unitPrice, Math.Round(unitPrice * quantity, 2)));
         }
 
         var subtotal = lines.Sum(line => line.LineTotal);
@@ -123,8 +124,9 @@ public sealed class OrderService(FoodJsDbContext db) : IOrderService
             Order = order,
             MenuItemId = line.Item.Id,
             ItemName = line.Item.Name,
+            SelectedChoice = line.Choice,
             Quantity = line.Quantity,
-            SnapshotPrice = line.Item.Price,
+            SnapshotPrice = line.UnitPrice,
             LineTotal = line.LineTotal
         }));
 
@@ -345,10 +347,10 @@ public sealed class OrderService(FoodJsDbContext db) : IOrderService
         return created;
     }
 
-    // Same product on several lines is merged into one line, like the cart does.
-    private static Dictionary<int, int> MergeLines(IEnumerable<CreateOrderItem?> items)
+    // Only merge matching products AND choices; different upgrades have different prices.
+    private static Dictionary<(int MenuId, string? Choice), int> MergeLines(IEnumerable<CreateOrderItem?> items)
     {
-        var merged = new Dictionary<int, int>();
+        var merged = new Dictionary<(int MenuId, string? Choice), int>();
         foreach (var item in items)
         {
             if (item is null || !PublicId.TryParseMenu(item.MenuItemId, out var menuId))
@@ -363,7 +365,16 @@ public sealed class OrderService(FoodJsDbContext db) : IOrderService
                 throw new ApiException(StatusCodes.Status400BadRequest, "Item quantity must be greater than 0.");
             }
 
-            merged[menuId] = merged.GetValueOrDefault(menuId) + item.Quantity;
+            var choice = ItemChoiceRules.Normalize(item.SelectedChoice);
+            _ = ItemChoiceRules.GetAddOnPrice(choice);
+            var key = (menuId, choice);
+            var currentQuantity = merged.GetValueOrDefault(key);
+            if (item.Quantity > int.MaxValue - currentQuantity)
+            {
+                throw new ApiException(StatusCodes.Status400BadRequest, "Item quantity is too large.");
+            }
+
+            merged[key] = currentQuantity + item.Quantity;
         }
 
         return merged;
@@ -425,7 +436,8 @@ public sealed class OrderService(FoodJsDbContext db) : IOrderService
             order.UserId,
             $"{order.User.FirstName} {order.User.LastName}".Trim(),
             items.Select(line => new OrderItemResponse(
-                PublicId.Menu(line.MenuItemId), line.ItemName, line.Quantity, line.SnapshotPrice)).ToList(),
+                PublicId.Menu(line.MenuItemId), line.ItemName, line.Quantity, line.SnapshotPrice,
+                line.SelectedChoice)).ToList(),
             items.Sum(line => line.Quantity),
             subtotal,
             Math.Max(0m, subtotal - order.TotalAmount),

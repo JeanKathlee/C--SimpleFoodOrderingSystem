@@ -1,7 +1,8 @@
 namespace FoodJS.Api.Features.Orders;
 
 // The shape of an order item in the API response.
-public sealed record OrderItemResponse(string MenuItemId, string Name, int Quantity, decimal Price);
+public sealed record OrderItemResponse(
+    string MenuItemId, string Name, int Quantity, decimal Price, string? SelectedChoice = null);
 
 public sealed record OrderStatusHistoryResponse(
     string? FromStatus,
@@ -54,6 +55,8 @@ public sealed class CreateOrderItem
     public string? MenuItemId { get; init; }
 
     public int Quantity { get; init; }
+
+    public string? SelectedChoice { get; init; }
 }
 
 public sealed class UpdateOrderStatusRequest

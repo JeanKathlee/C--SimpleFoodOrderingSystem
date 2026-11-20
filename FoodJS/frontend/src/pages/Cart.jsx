@@ -2,6 +2,7 @@ import { useEffect, useState, useMemo } from "react";
 import { useNavigate } from "react-router-dom";
 import { formatPrice } from "../data/menuItems";
 import { getAuthSession } from "../lib/auth";
+import { cartItemKey } from "../lib/cartItems";
 
 export default function Cart() {
   const navigate = useNavigate();
@@ -149,9 +150,10 @@ export default function Cart() {
           <div className="cart-layout">
             <section className="panel-card cart-list">
               {cartItems.map((item) => (
-                <div key={item.menuItemId} className="cart-item">
+                <div key={cartItemKey(item)} className="cart-item">
                   <div className="cart-item-info">
                     <h3>{item.name}</h3>
+                    {item.selectedChoice && <p>{item.selectedChoice}</p>}
                     <p>{formatPrice(item.price)} each</p>
                   </div>
 

@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import DeliveryMapPicker from "../components/DeliveryMapPicker";
 import { formatPrice } from "../data/menuItems";
 import { getAuthSession } from "../lib/auth";
+import { cartItemKey } from "../lib/cartItems";
 import { useNotification } from "../hooks/useNotification";
 
 function normalizeMobileNumber(value = "") {
@@ -484,7 +485,7 @@ export default function Checkout() {
                 {!cartItems.length && <p className="checkout-empty">No items in bag yet.</p>}
 
                 {cartItems.map((item) => (
-                  <div key={item.name} className="checkout-summary-item">
+                  <div key={cartItemKey(item)} className="checkout-summary-item">
                     <div>
                       <h3>
                         x{item.quantity} {item.name}

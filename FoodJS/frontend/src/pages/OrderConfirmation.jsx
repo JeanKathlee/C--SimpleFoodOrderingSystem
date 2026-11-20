@@ -2,6 +2,7 @@ import { useEffect, useState } from "react";
 import { useNavigate, useParams } from "react-router-dom";
 import { formatPrice } from "../data/menuItems";
 import { getAuthSession } from "../lib/auth";
+import { cartItemKey } from "../lib/cartItems";
 
 export default function OrderConfirmation() {
   const navigate = useNavigate();
@@ -115,9 +116,10 @@ export default function OrderConfirmation() {
             </div>
             <div className="order-items">
               {order.items.map((item) => (
-                <div key={item.menuItemId} className="order-item-row">
+                <div key={cartItemKey(item)} className="order-item-row">
                   <div>
                     <strong>{item.name}</strong>
+                    {item.selectedChoice && <p>{item.selectedChoice}</p>}
                     <p>Qty: {item.quantity}</p>
                   </div>
                   <span>{formatPrice(item.price * item.quantity)}</span>

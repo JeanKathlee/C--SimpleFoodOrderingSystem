@@ -39,6 +39,33 @@ The Menu feature is the example to copy. It is intentionally in-memory so the
 template builds without database packages. Replace it with Entity Framework Core
 and PostgreSQL after the API contracts have been migrated.
 
+## Checkout item choices
+
+Order requests accept an optional `selectedChoice` on each item. The server uses
+the current menu price plus the recognized upgrade price: `Go Regular Iced Tea`
+adds PHP 0, `Go Medium Iced Tea` adds PHP 45, and `Go Large Iced Tea` adds PHP 50.
+Missing/blank choices keep the base menu price; unknown choices return HTTP 400.
+Client-supplied item prices and add-on amounts do not determine the order total.
+Keep these values aligned with `frontend/src/pages/ProductDetails.jsx`.
+
+Items merge only when both the menu ID and selected choice match. The persisted
+order line stores the choice and the complete unit price, including the upgrade.
+Order responses return `selectedChoice` and that saved unit price in `price`.
+The `PreserveItemChoices` migration adds nullable choice columns to order and cart
+items, preserving existing rows without a choice.
+
+The C# cart feature must preserve `selectedChoice` and distinguish variants when
+adding, updating, or removing lines. Variant-specific cart operations are deferred
+to that implementation and frontend integration. The existing frontend cart
+mutation routes are unchanged. Keep `../backend/` as the migration reference;
+implement new backend behavior in this C# project.
+
+Run the SQLite order/pricing regression tests with:
+
+```powershell
+dotnet test backend-csharp/FoodJS.Backend.slnx
+```
+
 ## Suggested team ownership
 
 - Lead: shared architecture, code review, configuration, deployment, and database
