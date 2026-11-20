@@ -109,6 +109,29 @@ namespace FoodJS.Api.Migrations
                     b.ToTable("Categories");
                 });
 
+            modelBuilder.Entity("FoodJS.Api.Models.CheckoutSubmission", b =>
+                {
+                    b.Property<int>("UserId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("Key")
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("OrderId")
+                        .HasColumnType("INTEGER");
+
+                    b.Property<string>("RequestHash")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.HasKey("UserId", "Key");
+
+                    b.ToTable("CheckoutSubmissions");
+                });
+
             modelBuilder.Entity("FoodJS.Api.Models.Coupon", b =>
                 {
                     b.Property<int>("Id")

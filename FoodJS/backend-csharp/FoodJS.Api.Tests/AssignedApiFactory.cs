@@ -20,8 +20,13 @@ namespace FoodJS.Api.Tests;
 internal sealed class AssignedApiFactory : WebApplicationFactory<Program>
 {
     private readonly SqliteConnection connection = new("Data Source=:memory:");
+    private readonly string? databaseFile;
 
-    public AssignedApiFactory() => connection.Open();
+    public AssignedApiFactory(bool fileDatabase = false)
+    {
+        connection.Open();
+        if (fileDatabase) databaseFile = Path.Combine(Path.GetTempPath(), $"foodjs-checkout-{Guid.NewGuid():N}.db");
+    }
 
     protected override void ConfigureWebHost(IWebHostBuilder builder)
     {
@@ -32,7 +37,10 @@ internal sealed class AssignedApiFactory : WebApplicationFactory<Program>
             services.RemoveAll<FoodJsDbContext>();
             services.RemoveAll<DbContextOptions<FoodJsDbContext>>();
             services.RemoveAll<IDbContextOptionsConfiguration<FoodJsDbContext>>();
-            services.AddDbContext<FoodJsDbContext>(options => options.UseSqlite(connection));
+            services.AddDbContext<FoodJsDbContext>(options => {
+                if (databaseFile is null) options.UseSqlite(connection);
+                else options.UseSqlite($"Data Source={databaseFile};Default Timeout=10;Pooling=False");
+            });
             services.AddAuthentication(TestAuthenticationHandler.SchemeName)
                 .AddScheme<AuthenticationSchemeOptions, TestAuthenticationHandler>(
                     TestAuthenticationHandler.SchemeName, _ => { });
@@ -44,6 +52,8 @@ internal sealed class AssignedApiFactory : WebApplicationFactory<Program>
     {
         await base.DisposeAsync();
         await connection.DisposeAsync();
+        if (databaseFile is not null)
+            foreach (var suffix in new[] { "", "-shm", "-wal" }) File.Delete(databaseFile + suffix);
     }
 }
 

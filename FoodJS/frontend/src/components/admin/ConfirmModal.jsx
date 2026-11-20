@@ -15,7 +15,7 @@ export default function ConfirmModal({ open, title, message, confirmLabel, cance
     const previous = document.activeElement;
     const overflow = document.body.style.overflow;
     document.body.style.overflow = "hidden";
-    (dialogRef.current?.querySelector("button") || dialogRef.current)?.focus();
+    (dialogRef.current?.querySelector("[data-modal-cancel]:not(:disabled)") || dialogRef.current?.querySelector("button:not(:disabled)") || dialogRef.current)?.focus();
     return () => {
       document.body.style.overflow = overflow;
       if (previous?.isConnected) previous.focus();
@@ -33,7 +33,7 @@ export default function ConfirmModal({ open, title, message, confirmLabel, cance
   const handleKeys = event => {
     if (event.key === "Escape" && !pending) { event.preventDefault(); event.stopPropagation(); onCancel(); }
     if (event.key !== "Tab") return;
-    const buttons = [...dialogRef.current.querySelectorAll("button:not(:disabled), [tabindex='0']")];
+    const buttons = [...dialogRef.current.querySelectorAll("button:not(:disabled), a[href], input:not(:disabled), select:not(:disabled), textarea:not(:disabled), [tabindex='0']")];
     if (!buttons.length) { event.preventDefault(); return; }
     const first = buttons[0];
     const last = buttons[buttons.length - 1];
@@ -56,7 +56,7 @@ export default function ConfirmModal({ open, title, message, confirmLabel, cance
         {children}
         {error && <p className="menu-error" role="alert">{error}</p>}
         <div className="admin-modal-actions">
-          {!hideCancel && <button type="button" className="admin-btn admin-btn-light" disabled={pending} onClick={onCancel}>{cancelLabel}</button>}
+          {!hideCancel && <button data-modal-cancel type="button" className="admin-btn admin-btn-light" disabled={pending} onClick={onCancel}>{cancelLabel}</button>}
           {!hideConfirm && <button type="button" className={`admin-btn admin-btn-${confirmVariant}`} disabled={pending} onClick={confirm}>
             {pending ? "Please wait…" : confirmLabel}</button>}
         </div>

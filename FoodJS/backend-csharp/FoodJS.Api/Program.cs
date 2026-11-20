@@ -14,6 +14,7 @@ if (migrationBridge && !builder.Environment.IsDevelopment())
     throw new InvalidOperationException("The migration bridge is restricted to Development.");
 builder.Services.AddAuthentication();
 builder.Services.AddAuthorization();
+builder.Services.AddDataProtection();
 if (migrationBridge)
 {
     var referenceUrl = new Uri(builder.Configuration["MigrationBridge:ReferenceApiUrl"] ?? "http://localhost:3001/");
@@ -98,7 +99,7 @@ if (migrationBridge)
 {
     app.Use(async (context, next) =>
     {
-        if (context.Request.Method == "POST" && context.Request.Path == "/api/orders" && context.User.Identity?.IsAuthenticated == true)
+        if (context.Request.Method == "POST" && (context.Request.Path == "/api/orders" || context.Request.Path == "/api/orders/quote") && context.User.Identity?.IsAuthenticated == true)
             await context.RequestServices.GetRequiredService<MigrationDependencies>().RefreshCouponsAsync(context.RequestAborted);
         await next(context);
     });

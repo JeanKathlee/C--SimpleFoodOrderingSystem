@@ -51,6 +51,10 @@ public sealed class OrdersController(IOrderService orderService) : ControllerBas
         return StatusCode(StatusCodes.Status201Created, order);
     }
 
+    [HttpPost("quote")]
+    public async Task<ActionResult<CheckoutQuoteResponse>> Quote(CreateOrderRequest request, CancellationToken ct) =>
+        Ok(await orderService.QuoteAsync(User.RequireUserId(), request, ct));
+
     [HttpPatch("{id}/cancel")]
     public async Task<ActionResult<OrderResponse>> Cancel(string id, CancellationToken ct)
     {

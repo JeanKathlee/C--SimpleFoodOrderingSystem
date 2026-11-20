@@ -162,8 +162,49 @@ Test authentication is defined only inside the test project; users, roles,
 categories, and coupons are seeded as dependency data. This does not implement or
 verify teammate-owned authentication/profile/cart/category/coupon/notification APIs.
 Browser checkout summary/map behavior and full frontend-to-C# integration remain
-team acceptance checks once those APIs are available. The suite currently has 92
+team acceptance checks once those APIs are available. The suite currently has 107
 passing cases; PR approval and merging remain with the project lead.
+
+## Reviewed checkout and safe retries
+
+The updated customer checkout uses authenticated `POST /api/orders/quote` with
+`items` (menu ID, quantity, selected choice) and optional `couponCode`. It returns
+current menu prices, complete item quantities, subtotal, discount, total, applied
+coupon, and a protected `quoteToken` with a ten-minute expiry. Quoting does not
+create an order, consume a coupon, save an address, or clear a cart.
+
+Checkout sends that token and a UUID `idempotencyKey` with `POST /api/orders`.
+The server recalculates pricing and rejects changed, expired, tampered, or
+other-user reviews with HTTP 409 before saving. Reviewed checkout requires a
+recipient, Philippine mobile number, delivery address, and cash payment; card
+payments have no gateway and are disabled in the updated UI. Existing clients
+without a quote retain the earlier request contract.
+
+`GuardCheckoutSubmissions` adds a submission ledger keyed by user and UUID.
+The ledger, order, items, payment, history, notification, and coupon usage commit
+in the same SQLite transaction. A retry with the same details returns the saved
+order even if menu prices/coupons later change. Different details with the same
+key return 409. Ledger entries remain after order deletion so an old attempt
+cannot recreate a deleted order. Data Protection protects quote tokens; deployed
+instances must share a persisted key ring when serving the same database.
+
+The browser stores the exact pending submission in session storage before
+posting. Lost responses/timeouts can be retried with that same key after reload.
+Order acceptance navigates directly to saved confirmation details. Bag cleanup
+is a separate, retryable operation; failure never resubmits the order. Cleanup
+keeps a changed bag and lets the customer explicitly retain it for later.
+
+Checkout/review/confirmation and shared order details paginate item types at
+10/20/50 rows while totals include all quantities. This bounds rendered rows;
+the current teammate-owned cart API still returns the complete cart. Delivery
+address search returns at most five results, and the optional map remains mounted
+through unrelated form edits. No cart, profile, authentication, category, coupon
+management, or notification endpoint is implemented by these changes.
+
+Checkout HTTP tests cover quotes, stale/expired/other-user/tampered tokens,
+contact validation, replay conflicts, deleted orders, and simultaneous retries
+on separate SQLite connections. Browser QA uses isolated mock dependencies;
+the running local bridge/proxy was also checked for successful quote responses.
 
 ## Suggested team ownership
 

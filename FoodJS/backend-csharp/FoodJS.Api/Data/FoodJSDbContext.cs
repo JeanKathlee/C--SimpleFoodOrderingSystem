@@ -20,4 +20,5 @@ public class FoodJsDbContext(DbContextOptions<FoodJsDbContext> options)
     public DbSet<Coupon> Coupons => Set<Coupon>();
     public DbSet<Payment> Payments => Set<Payment>();
     public DbSet<Notification> Notifications => Set<Notification>();
+    public DbSet<CheckoutSubmission> CheckoutSubmissions => Set<CheckoutSubmission>();
 }

@@ -448,6 +448,116 @@ public sealed class AssignedApiFlowTests : IAsyncLifetime
     public async Task Invalid_order_page_queries_return_a_message(string query) =>
         await Error(await admin.GetAsync($"/api/orders/admin/paged?{query}"), HttpStatusCode.BadRequest);
 
+    private async Task<CheckoutQuoteResponse> CheckoutQuote(string? coupon = null) => await Read<CheckoutQuoteResponse>(
+        await customer.PostAsJsonAsync("/api/orders/quote", new { items = new[] { new { menuItemId = PublicId.Menu(menuId), quantity = 2, selectedChoice = "Go Large Iced Tea", price = 0.01 } }, couponCode = coupon }));
+
+    private CreateOrderRequest ReviewedCheckout(CheckoutQuoteResponse quote, string key, string name = "Recipient", string? address = "QA delivery, Manila", string mobile = "0917 123 4567", string payment = "cash") => new()
+    {
+        Items = [new() { MenuItemId = PublicId.Menu(menuId), Quantity = 2, SelectedChoice = "Go Large Iced Tea" }],
+        CustomerName = name, Address = address, MobileNumber = mobile, PaymentMethod = payment, Note = "Call on arrival",
+        CouponCode = quote.CouponCode, QuoteToken = quote.QuoteToken, IdempotencyKey = key
+    };
+
+    [Fact]
+    public async Task Checkout_quote_uses_current_prices_choices_and_coupon_rules_without_writing_orders()
+    {
+        var quote = await CheckoutQuote("SAVE10");
+        Assert.Equal(300m, quote.Subtotal); Assert.Equal(30m, quote.Discount); Assert.Equal(270m, quote.Total);
+        Assert.Equal(2, quote.ItemCount); Assert.Equal(150m, Assert.Single(quote.Items).Price);
+        Assert.Equal("Go Large Iced Tea", Assert.Single(quote.Items).SelectedChoice);
+        Assert.True(quote.ExpiresAt > DateTimeOffset.UtcNow);
+        using var scope = factory.Services.CreateScope(); var db = scope.ServiceProvider.GetRequiredService<FoodJsDbContext>();
+        Assert.Empty(await db.Orders.ToListAsync()); Assert.Equal(0, (await db.Coupons.SingleAsync()).UsedCount);
+        Assert.Equal(HttpStatusCode.Unauthorized, (await anonymous.PostAsJsonAsync("/api/orders/quote", OrderRequest())).StatusCode);
+    }
+
+    [Fact]
+    public async Task Checkout_retries_return_one_order_and_do_not_repeat_side_effects()
+    {
+        var quote = await CheckoutQuote("SAVE10"); var request = ReviewedCheckout(quote, Guid.NewGuid().ToString());
+        var first = await Read<OrderResponse>(await customer.PostAsJsonAsync("/api/orders", request), HttpStatusCode.Created);
+        var again = await Read<OrderResponse>(await customer.PostAsJsonAsync("/api/orders", request), HttpStatusCode.Created);
+        Assert.Equal(first.Id, again.Id); Assert.Equal("09171234567", again.MobileNumber);
+        using var scope = factory.Services.CreateScope(); var db = scope.ServiceProvider.GetRequiredService<FoodJsDbContext>();
+        Assert.Equal(1, await db.Orders.CountAsync()); Assert.Equal(1, await db.Payments.CountAsync());
+        Assert.Equal(1, await db.OrderStatusHistories.CountAsync()); Assert.Equal(1, await db.Notifications.CountAsync());
+        Assert.Equal(1, await db.CheckoutSubmissions.CountAsync()); Assert.Equal(1, (await db.Coupons.SingleAsync()).UsedCount);
+    }
+
+    [Fact]
+    public async Task Changed_prices_require_another_review_before_any_order_is_written()
+    {
+        var quote = await CheckoutQuote();
+        using (var scope = factory.Services.CreateScope()) { var db = scope.ServiceProvider.GetRequiredService<FoodJsDbContext>(); (await db.MenuItems.SingleAsync()).Price = 200m; await db.SaveChangesAsync(); }
+        await Error(await customer.PostAsJsonAsync("/api/orders", ReviewedCheckout(quote, Guid.NewGuid().ToString())), HttpStatusCode.Conflict);
+        using (var scope = factory.Services.CreateScope()) { var db = scope.ServiceProvider.GetRequiredService<FoodJsDbContext>(); Assert.Equal(0, await db.Orders.CountAsync()); Assert.Equal(0, await db.CheckoutSubmissions.CountAsync()); }
+        var updated = await CheckoutQuote(); Assert.Equal(500m, updated.Total);
+        var saved = await Read<OrderResponse>(await customer.PostAsJsonAsync("/api/orders", ReviewedCheckout(updated, Guid.NewGuid().ToString())), HttpStatusCode.Created);
+        Assert.Equal(updated.Total, saved.Total);
+    }
+
+    [Fact]
+    public async Task Reviewed_checkout_cannot_use_another_users_quote_or_a_tampered_quote()
+    {
+        var quote = await CheckoutQuote();
+        await Error(await otherCustomer.PostAsJsonAsync("/api/orders", ReviewedCheckout(quote, Guid.NewGuid().ToString())), HttpStatusCode.Conflict);
+        await Error(await customer.PostAsJsonAsync("/api/orders", ReviewedCheckout(quote with { QuoteToken = "tampered" }, Guid.NewGuid().ToString())), HttpStatusCode.Conflict);
+    }
+
+    [Fact]
+    public async Task A_submission_key_cannot_be_reused_for_changed_details_or_recreate_a_deleted_order()
+    {
+        var quote = await CheckoutQuote(); var key = Guid.NewGuid().ToString(); var request = ReviewedCheckout(quote, key);
+        var saved = await Read<OrderResponse>(await customer.PostAsJsonAsync("/api/orders", request), HttpStatusCode.Created);
+        await Error(await customer.PostAsJsonAsync("/api/orders", ReviewedCheckout(quote, key, name: "Changed name")), HttpStatusCode.Conflict);
+        await admin.DeleteAsync($"/api/orders/{saved.Id}");
+        await Error(await customer.PostAsJsonAsync("/api/orders", request), HttpStatusCode.Conflict);
+        using var scope = factory.Services.CreateScope(); Assert.Equal(0, await scope.ServiceProvider.GetRequiredService<FoodJsDbContext>().Orders.CountAsync());
+    }
+
+    [Fact]
+    public async Task Accepted_submission_replays_even_after_menu_or_coupon_changes()
+    {
+        var quote = await CheckoutQuote("SAVE10"); var request = ReviewedCheckout(quote, Guid.NewGuid().ToString());
+        var saved = await Read<OrderResponse>(await customer.PostAsJsonAsync("/api/orders", request), HttpStatusCode.Created);
+        using (var scope = factory.Services.CreateScope()) { var db = scope.ServiceProvider.GetRequiredService<FoodJsDbContext>(); (await db.MenuItems.SingleAsync()).IsAvailable = false; (await db.Coupons.SingleAsync()).IsActive = false; await db.SaveChangesAsync(); }
+        var replay = await Read<OrderResponse>(await customer.PostAsJsonAsync("/api/orders", request), HttpStatusCode.Created);
+        Assert.Equal(saved.Id, replay.Id); Assert.Equal(saved.Total, replay.Total);
+    }
+
+    [Theory]
+    [InlineData("   ", "09171234567", "cash", "Recipient")]
+    [InlineData("Address", "12345", "cash", "Recipient")]
+    [InlineData("Address", "09171234567", "card", "Recipient")]
+    [InlineData("Address", "09171234567", "unknown", "Recipient")]
+    [InlineData("Address", "09171234567", "cash", "   ")]
+    public async Task Reviewed_checkout_validates_delivery_contact_and_supported_payment(string address, string mobile, string payment, string name)
+    {
+        var quote = await CheckoutQuote();
+        await Error(await customer.PostAsJsonAsync("/api/orders", ReviewedCheckout(quote, Guid.NewGuid().ToString(), name, address, mobile, payment)), HttpStatusCode.BadRequest);
+    }
+
+    [Fact]
+    public async Task Expired_server_reviews_are_rejected_before_creation()
+    {
+        var quote = await CheckoutQuote();
+        var provider = factory.Services.GetRequiredService<Microsoft.AspNetCore.DataProtection.IDataProtectionProvider>();
+        var protector = provider.CreateProtector("FoodJS.CheckoutQuote.v1");
+        var proof = System.Text.Json.Nodes.JsonNode.Parse(Microsoft.AspNetCore.DataProtection.DataProtectionCommonExtensions.Unprotect(protector, quote.QuoteToken))!;
+        proof["ExpiresAt"] = DateTimeOffset.UtcNow.AddMinutes(-1).ToString("O");
+        var expiredToken = Microsoft.AspNetCore.DataProtection.DataProtectionCommonExtensions.Protect(protector, proof.ToJsonString());
+        await Error(await customer.PostAsJsonAsync("/api/orders", ReviewedCheckout(quote with { QuoteToken = expiredToken }, Guid.NewGuid().ToString())), HttpStatusCode.Conflict);
+    }
+
+    [Theory]
+    [InlineData("")]
+    [InlineData("not-a-guid")]
+    public async Task Reviewed_checkout_requires_a_valid_submission_key(string key)
+    {
+        var quote = await CheckoutQuote();
+        await Error(await customer.PostAsJsonAsync("/api/orders", ReviewedCheckout(quote, key)), HttpStatusCode.BadRequest);
+    }
+
     private HttpClient ClientFor(int id, string role)
     {
         var client = factory.CreateClient();

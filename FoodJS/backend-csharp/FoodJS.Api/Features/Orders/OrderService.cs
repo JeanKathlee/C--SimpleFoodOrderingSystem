@@ -5,15 +5,77 @@ using FoodJS.Api.Models;
 using Microsoft.EntityFrameworkCore;
 using System.Globalization;
 using System.Runtime.CompilerServices;
+using System.Security.Cryptography;
+using System.Text;
+using System.Text.Json;
+using Microsoft.AspNetCore.DataProtection;
 
 namespace FoodJS.Api.Features.Orders;
 
-public sealed class OrderService(FoodJsDbContext db) : IOrderService
+public sealed class OrderService(FoodJsDbContext db, IDataProtectionProvider? protection = null) : IOrderService
 {
     // Addresses.City is required by the schema, but checkout only collects one free-text
     // address (map picker / typed). The full text goes into AddressLine1.
     private const string UnspecifiedCity = "N/A";
     private const string DefaultPaymentMethod = "cash";
+    private static readonly IDataProtectionProvider FallbackProtection = new EphemeralDataProtectionProvider();
+    private readonly IDataProtector quoteProtector = (protection ?? FallbackProtection).CreateProtector("FoodJS.CheckoutQuote.v1");
+
+    private sealed record PricedCheckout(List<(MenuItem Item, string? Choice, int Quantity, decimal UnitPrice, decimal LineTotal)> Lines,
+        Coupon? Coupon, decimal Subtotal, decimal Discount, decimal Total);
+    private sealed record QuoteProof(int UserId, string Fingerprint, DateTimeOffset ExpiresAt);
+    private static string Hash(object value) => Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(JsonSerializer.Serialize(value))));
+    private static string Fingerprint(PricedCheckout price) => Hash(new {
+        items = price.Lines.OrderBy(line => line.Item.Id).ThenBy(line => line.Choice, StringComparer.Ordinal).Select(line => new {
+            line.Item.Id, line.Item.Name, line.Choice, line.Quantity, price = line.UnitPrice.ToString("G29", CultureInfo.InvariantCulture) }),
+        coupon = price.Coupon?.Code, discount = price.Discount.ToString("G29", CultureInfo.InvariantCulture), total = price.Total.ToString("G29", CultureInfo.InvariantCulture)
+    });
+    private static string SubmissionHash(CreateOrderRequest request) => Hash(new {
+        items = request.Items?.OrderBy(item => item.MenuItemId, StringComparer.Ordinal).ThenBy(item => item.SelectedChoice, StringComparer.Ordinal)
+            .Select(item => new { item.MenuItemId, item.Quantity, choice = ItemChoiceRules.Normalize(item.SelectedChoice) }),
+        name = request.CustomerName?.Trim(), mobile = NormalizeMobile(request.MobileNumber), address = request.Address?.Trim(),
+        note = request.Note?.Trim() ?? "", payment = request.PaymentMethod?.Trim().ToLowerInvariant() ?? "cash", coupon = request.CouponCode?.Trim()
+    });
+    private static string NormalizeMobile(string? value) => System.Text.RegularExpressions.Regex.Replace(value ?? "", @"[\s-]", "");
+    private static string? ParseSubmissionKey(CreateOrderRequest request)
+    {
+        if (string.IsNullOrEmpty(request.IdempotencyKey))
+        {
+            if (!string.IsNullOrWhiteSpace(request.QuoteToken)) throw new ApiException(400, "A submission key is required for a reviewed checkout.");
+            return null;
+        }
+        if (!Guid.TryParse(request.IdempotencyKey, out var key)) throw new ApiException(400, "Invalid submission key.");
+        return key.ToString("D");
+    }
+    private static void ValidateQuotedContact(CreateOrderRequest request)
+    {
+        if (string.IsNullOrWhiteSpace(request.Address) || request.Address.Trim().Length > 2000)
+            throw new ApiException(400, "Enter a delivery address of up to 2000 characters.");
+        if ((request.CustomerName?.Trim().Length ?? 0) > 120 || (request.Note?.Length ?? 0) > 1000)
+            throw new ApiException(400, "Use up to 120 characters for the recipient and 1000 for delivery notes.");
+        if (!System.Text.RegularExpressions.Regex.IsMatch(NormalizeMobile(request.MobileNumber), @"^(09\d{9}|\+639\d{9}|639\d{9})$"))
+            throw new ApiException(400, "Enter a valid Philippine mobile number.");
+        if (!string.Equals(request.PaymentMethod ?? "cash", "cash", StringComparison.OrdinalIgnoreCase))
+            throw new ApiException(400, "Only cash on delivery is currently available.");
+    }
+    public async Task<CheckoutQuoteResponse> QuoteAsync(int userId, CreateOrderRequest request, CancellationToken ct = default)
+    {
+        var price = await CalculateAsync(request, ct);
+        var expires = DateTimeOffset.UtcNow.AddMinutes(10);
+        var token = quoteProtector.Protect(JsonSerializer.Serialize(new QuoteProof(userId, Fingerprint(price), expires)));
+        return new(token, expires, price.Lines.Select(line => new OrderItemResponse(PublicId.Menu(line.Item.Id), line.Item.Name,
+            line.Quantity, line.UnitPrice, line.Choice)).ToList(), price.Lines.Sum(line => line.Quantity), price.Subtotal,
+            price.Discount, price.Total, price.Coupon?.Code);
+    }
+    private void ValidateQuote(int userId, string token, PricedCheckout price)
+    {
+        QuoteProof? proof;
+        try { proof = JsonSerializer.Deserialize<QuoteProof>(quoteProtector.Unprotect(token)); }
+        catch (Exception failure) when (failure is CryptographicException or JsonException)
+        { throw new ApiException(409, "This checkout review is no longer valid. Review the current total again."); }
+        if (proof is null || proof.UserId != userId || proof.ExpiresAt <= DateTimeOffset.UtcNow || proof.Fingerprint != Fingerprint(price))
+            throw new ApiException(409, "Menu prices or discounts changed, or your review expired. Review the current total again.");
+    }
 
     public async Task<OrderResponse?> GetForAdminAsync(string publicId, CancellationToken ct = default)
     {
@@ -96,65 +158,35 @@ public sealed class OrderService(FoodJsDbContext db) : IOrderService
             throw new ApiException(StatusCodes.Status400BadRequest, "Customer name is required.");
         }
 
+        if (request.Items.Any(item => item is null)) throw new ApiException(400, "Invalid order item.");
+        var key = ParseSubmissionKey(request);
+        var requestHash = key is null ? "" : SubmissionHash(request);
+        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        if (key is not null)
+        {
+            var prior = await db.CheckoutSubmissions.AsNoTracking().SingleOrDefaultAsync(entry => entry.UserId == userId && entry.Key == key, ct);
+            if (prior is not null)
+            {
+                if (prior.RequestHash != requestHash) throw new ApiException(409, "This submission key was already used for different checkout details.");
+                return await GetForUserAsync(userId, PublicId.Order(prior.OrderId), ct)
+                    ?? throw new ApiException(409, "This order was already submitted and later removed. Check your order history.");
+            }
+        }
+        if (!string.IsNullOrWhiteSpace(request.QuoteToken)) ValidateQuotedContact(request);
+
         var user = await db.Users.FirstOrDefaultAsync(entry => entry.Id == userId, ct)
             ?? throw new ApiException(StatusCodes.Status401Unauthorized, "Unauthorized. User not found.");
 
-        // 1. Price every line from the menu, never from the client.
-        var quantities = MergeLines(request.Items);
-        var menuIds = quantities.Keys.Select(key => key.MenuId).Distinct().ToList();
-        var menuItems = await db.MenuItems
-            .Where(item => menuIds.Contains(item.Id))
-            .ToDictionaryAsync(item => item.Id, ct);
-
-        var lines = new List<(MenuItem Item, string? Choice, int Quantity, decimal UnitPrice, decimal LineTotal)>();
-        foreach (var ((menuId, choice), quantity) in quantities)
-        {
-            if (!menuItems.TryGetValue(menuId, out var item))
-            {
-                throw new ApiException(
-                    StatusCodes.Status400BadRequest,
-                    $"Menu item {PublicId.Menu(menuId)} no longer exists.");
-            }
-
-            if (!item.IsAvailable)
-            {
-                throw new ApiException(
-                    StatusCodes.Status400BadRequest,
-                    $"{item.Name} is currently unavailable.");
-            }
-
-            var unitPrice = item.Price + ItemChoiceRules.GetAddOnPrice(choice);
-            lines.Add((item, choice, quantity, unitPrice, Math.Round(unitPrice * quantity, 2)));
-        }
-
-        var subtotal = lines.Sum(line => line.LineTotal);
-
-        // 2. Re-validate the coupon on the server and compute the discount ourselves.
-        Coupon? coupon = null;
-        var discount = 0m;
-        var couponCode = request.CouponCode?.Trim();
-        if (!string.IsNullOrEmpty(couponCode))
-        {
-            coupon = await db.Coupons.FirstOrDefaultAsync(entry => entry.Code == couponCode, ct);
-            var check = CouponRules.Evaluate(couponCode, coupon, subtotal, DateOnly.FromDateTime(DateTime.UtcNow));
-            if (!check.Valid)
-            {
-                throw new ApiException(StatusCodes.Status400BadRequest, check.Error!);
-            }
-
-            discount = check.DiscountAmount;
-        }
-
-        var total = Math.Max(0m, subtotal - discount);
+        var priced = await CalculateAsync(request, ct);
+        var (lines, coupon, subtotal, discount, total) = priced;
+        if (!string.IsNullOrWhiteSpace(request.QuoteToken)) ValidateQuote(userId, request.QuoteToken, priced);
 
         // 3. Delivery address: reuse an identical saved address, otherwise save a new one.
         var address = await FindOrCreateAddressAsync(userId, request.Address, ct);
 
         var pendingStatus = await GetStatusRowAsync(OrderStatusRules.Pending, ct);
         var now = DateTimeOffset.UtcNow;
-        var mobile = request.MobileNumber?.Trim() ?? string.Empty;
-
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
+        var mobile = NormalizeMobile(request.MobileNumber);
 
         var order = new Order
         {
@@ -206,6 +238,7 @@ public sealed class OrderService(FoodJsDbContext db) : IOrderService
         await db.SaveChangesAsync(ct);
 
         db.Notifications.Add(NewStatusNotification(userId, order.Id, OrderStatusRules.Pending, now));
+        if (key is not null) db.CheckoutSubmissions.Add(new CheckoutSubmission { UserId = userId, Key = key, RequestHash = requestHash, OrderId = order.Id });
 
         if (coupon is not null)
         {
@@ -324,6 +357,60 @@ public sealed class OrderService(FoodJsDbContext db) : IOrderService
         db.Orders.Remove(order);
         await db.SaveChangesAsync(ct);
         return true;
+    }
+
+    private async Task<PricedCheckout> CalculateAsync(CreateOrderRequest request, CancellationToken ct)
+    {
+        if (request.Items is not { Count: > 0 }) throw new ApiException(400, "Items are required.");
+        // 1. Price every line from the menu, never from the client.
+        var quantities = MergeLines(request.Items);
+        var menuIds = quantities.Keys.Select(key => key.MenuId).Distinct().ToList();
+        var menuItems = await db.MenuItems
+            .Where(item => menuIds.Contains(item.Id))
+            .ToDictionaryAsync(item => item.Id, ct);
+
+        var lines = new List<(MenuItem Item, string? Choice, int Quantity, decimal UnitPrice, decimal LineTotal)>();
+        foreach (var ((menuId, choice), quantity) in quantities)
+        {
+            if (!menuItems.TryGetValue(menuId, out var item))
+            {
+                throw new ApiException(
+                    StatusCodes.Status400BadRequest,
+                    $"Menu item {PublicId.Menu(menuId)} no longer exists.");
+            }
+
+            if (!item.IsAvailable)
+            {
+                throw new ApiException(
+                    StatusCodes.Status400BadRequest,
+                    $"{item.Name} is currently unavailable.");
+            }
+
+            var unitPrice = item.Price + ItemChoiceRules.GetAddOnPrice(choice);
+            lines.Add((item, choice, quantity, unitPrice, Math.Round(unitPrice * quantity, 2)));
+        }
+
+        var subtotal = lines.Sum(line => line.LineTotal);
+
+        // 2. Re-validate the coupon on the server and compute the discount ourselves.
+        Coupon? coupon = null;
+        var discount = 0m;
+        var couponCode = request.CouponCode?.Trim();
+        if (!string.IsNullOrEmpty(couponCode))
+        {
+            coupon = await db.Coupons.FirstOrDefaultAsync(entry => entry.Code == couponCode, ct);
+            var check = CouponRules.Evaluate(couponCode, coupon, subtotal, DateOnly.FromDateTime(DateTime.UtcNow));
+            if (!check.Valid)
+            {
+                throw new ApiException(StatusCodes.Status400BadRequest, check.Error!);
+            }
+
+            discount = check.DiscountAmount;
+        }
+
+        var total = Math.Max(0m, subtotal - discount);
+
+        return new(lines, coupon, subtotal, discount, total);
     }
 
     // ---- helpers --------------------------------------------------------------------

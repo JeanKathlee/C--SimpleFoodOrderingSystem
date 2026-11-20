@@ -52,6 +52,8 @@ public sealed record OrderResponse(
 // The shape of the request body for creating an order. All fields are optional to allow partial updates.
 public sealed class CreateOrderRequest
 {
+    public string? QuoteToken { get; init; }
+    public string? IdempotencyKey { get; init; }
     public List<CreateOrderItem>? Items { get; init; }
 
     public string? CustomerName { get; init; }
@@ -80,3 +82,7 @@ public sealed class UpdateOrderStatusRequest
 {
     public string? Status { get; init; }
 }
+
+public sealed record CheckoutQuoteResponse(string QuoteToken, DateTimeOffset ExpiresAt,
+    IReadOnlyList<OrderItemResponse> Items, int ItemCount, decimal Subtotal, decimal Discount,
+    decimal Total, string? CouponCode);
