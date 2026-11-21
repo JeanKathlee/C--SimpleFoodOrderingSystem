@@ -1,6 +1,6 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { clearAuthSession, getAuthSession } from "../lib/auth";
+import { getAuthSession, logoutUser } from "../lib/auth";
 import AdminSidebar from "../components/admin/AdminSidebar";
 import AdminTopbar from "../components/admin/AdminTopbar";
 import AnalyticsCards from "../components/admin/AnalyticsCards";
@@ -9,6 +9,7 @@ import OrdersPanel from "../components/admin/OrdersPanel";
 import MenuManagement from "../components/admin/MenuManagement";
 import CategoryManagement from "../components/admin/CategoryManagement";
 import CouponManagement from "../components/admin/CouponManagement";
+import UserManagement from "../components/admin/UserManagement";
 import PopularItems from "../components/admin/PopularItems";
 import ConfirmModal from "../components/admin/ConfirmModal";
 import { useNotification } from "../hooks/useNotification";
@@ -123,6 +124,7 @@ export default function Dashboard() {
   const [categories, setCategories] = useState([]);
   const [menuItems, setMenuItems] = useState([]);
   const [coupons, setCoupons] = useState([]);
+  const [users, setUsers] = useState([]);
   const [allOrders, setAllOrders] = useState([]);
   const [weeklyRevenue, setWeeklyRevenue] = useState(DEFAULT_WEEKLY_REVENUE);
   const [statusOptions, setStatusOptions] = useState(DEFAULT_STATUS_OPTIONS);
@@ -161,7 +163,9 @@ export default function Dashboard() {
           fetch("/api/categories"),
           fetch("/api/menu"),
           fetch("/api/orders"),
-          fetch("/api/admin-insights"),
+          fetch("/api/admin-insights", {
+            headers: { Authorization: `Bearer ${session?.token}` },
+          }),
           fetch("/api/coupons"),
         ]);
 
@@ -201,6 +205,20 @@ export default function Dashboard() {
       if (response.ok) {
         const data = await response.json();
         setAllOrders(normalizeOrders(Array.isArray(data) ? data : []));
+      }
+    } catch (_error) {
+      // silent fail
+    }
+  };
+
+  const loadUsers = async () => {
+    try {
+      const response = await fetch("/api/users", {
+        headers: { Authorization: `Bearer ${session?.token}` },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setUsers(Array.isArray(data) ? data : []);
       }
     } catch (_error) {
       // silent fail
@@ -272,9 +290,11 @@ export default function Dashboard() {
   useEffect(() => {
     loadAdminData();
     loadAllOrders();
+    loadUsers();
     const pollingId = setInterval(() => {
       loadAdminData();
       loadAllOrders();
+      loadUsers();
     }, 15000);
 
     return () => clearInterval(pollingId);
@@ -335,8 +355,8 @@ export default function Dashboard() {
     setLogoutConfirm(true);
   };
 
-  const confirmLogout = () => {
-    clearAuthSession();
+  const confirmLogout = async () => {
+    await logoutUser();
     setLogoutConfirm(false);
     navigate("/");
   };
@@ -646,6 +666,94 @@ export default function Dashboard() {
     });
   };
 
+  const handleAddUser = async (payload) => {
+    try {
+      const response = await fetch("/api/users", {
+        method: "POST",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        errorNotif(data?.message || "Failed to add user");
+        return false;
+      }
+
+      setUsers((current) => [...current, data]);
+      success("User added successfully!");
+      bumpSyncState("users");
+      return true;
+    } catch (err) {
+      errorNotif("Error adding user");
+      return false;
+    }
+  };
+
+  const handleUpdateUser = async (id, payload) => {
+    try {
+      const response = await fetch(`/api/users/${id}`, {
+        method: "PUT",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${session?.token}`,
+        },
+        body: JSON.stringify(payload),
+      });
+
+      const data = await response.json();
+      if (!response.ok) {
+        errorNotif(data?.message || "Failed to update user");
+        return false;
+      }
+
+      setUsers((current) => current.map((user) => (user.id === id ? data : user)));
+      success("User updated successfully!");
+      bumpSyncState("users");
+      return true;
+    } catch (err) {
+      errorNotif("Error updating user");
+      return false;
+    }
+  };
+
+  const handleDeleteUser = (id) => {
+    const user = users.find((item) => item.id === id);
+
+    setModalConfig({
+      open: true,
+      title: "Delete user",
+      message: `${user?.name || "This user"} (${user?.email || ""}) will be permanently removed.`,
+      confirmLabel: "Delete User",
+      cancelLabel: "Cancel",
+      hideCancel: false,
+      confirmVariant: "danger",
+      onConfirm: async () => {
+        try {
+          const response = await fetch(`/api/users/${id}`, {
+            method: "DELETE",
+            headers: { Authorization: `Bearer ${session?.token}` },
+          });
+
+          if (!response.ok) {
+            const data = await response.json();
+            errorNotif(data?.message || "Failed to delete user");
+          } else {
+            setUsers((current) => current.filter((item) => item.id !== id));
+            success("User deleted successfully!");
+            bumpSyncState("users");
+          }
+        } catch (err) {
+          errorNotif("Error deleting user");
+        }
+        setModalConfig((current) => ({ ...current, open: false }));
+      },
+    });
+  };
+
   const closeModal = () => {
     setModalConfig((current) => ({ ...current, open: false }));
   };
@@ -735,6 +843,16 @@ export default function Dashboard() {
             onAddCoupon={handleAddCoupon}
             onUpdateCoupon={handleUpdateCoupon}
             onDeleteCoupon={handleDeleteCoupon}
+          />
+        )}
+
+        {activeSection === "users" && (
+          <UserManagement
+            users={users}
+            currentUserId={session?.user?.id}
+            onAddUser={handleAddUser}
+            onUpdateUser={handleUpdateUser}
+            onDeleteUser={handleDeleteUser}
           />
         )}
       </main>

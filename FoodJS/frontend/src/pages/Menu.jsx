@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import logo from "../../assets/logo.png";
-import { clearAuthSession, getAuthSession } from "../lib/auth";
+import { getAuthSession, logoutUser } from "../lib/auth";
 import {
   fetchMenuFromBackend,
   getCategoriesFromMenu,
@@ -80,8 +80,8 @@ export default function Menu() {
     setLogoutConfirm(true);
   };
 
-  const confirmLogout = () => {
-    clearAuthSession();
+  const confirmLogout = async () => {
+    await logoutUser();
     setLogoutConfirm(false);
     navigate("/");
   };

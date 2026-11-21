@@ -8,7 +8,7 @@ const router = express.Router();
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "383406826534-8al6042a0n42itk48fpis06m0r81ip8k.apps.googleusercontent.com";
 const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || "your-google-client-secret-here";
-const JWT_SECRET = process.env.JWT_SECRET || "your-jwt-secret-key";
+const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
 
 router.post('/google/callback', async (req, res) => {
   try {

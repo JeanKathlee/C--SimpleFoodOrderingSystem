@@ -1,5 +1,6 @@
 const express = require('express');
 const { readJsonFromData } = require('../lib/readJson');
+const { verifyToken, requireAdmin } = require('../middleware/auth');
 
 const router = express.Router();
 
@@ -37,7 +38,7 @@ function calculateInsights() {
   }
 }
 
-router.get('/', (_req, res) => {
+router.get('/', verifyToken, requireAdmin, (_req, res) => {
   const insights = calculateInsights();
   res.json(insights);
 });
