@@ -55,6 +55,7 @@ export default function CategoryManagement({
         <input
           type="text"
           placeholder="Category name"
+          aria-label="Category name"
           value={form.name}
           onChange={(event) => setForm((current) => ({ ...current, name: event.target.value }))}
         />
@@ -62,6 +63,7 @@ export default function CategoryManagement({
         <input
           type="text"
           placeholder="Description"
+          aria-label="Category description"
           value={form.description}
           onChange={(event) =>
             setForm((current) => ({ ...current, description: event.target.value }))

@@ -1,4 +1,6 @@
 import { useState } from "react";
+import Pagination from "../Pagination";
+import usePagination from "../../hooks/usePagination";
 
 const EMPTY_COUPON = {
   code: "",
@@ -11,6 +13,7 @@ const EMPTY_COUPON = {
 export default function CouponManagement({ coupons, onAddCoupon, onUpdateCoupon, onDeleteCoupon }) {
   const [form, setForm] = useState(EMPTY_COUPON);
   const [editId, setEditId] = useState(null);
+  const pager = usePagination(coupons, 8);
 
   const reset = () => {
     setForm(EMPTY_COUPON);
@@ -27,7 +30,7 @@ export default function CouponManagement({ coupons, onAddCoupon, onUpdateCoupon,
       discountType: form.discountType,
       minOrderAmount: parseFloat(form.minOrderAmount) || 0,
       maxUses: form.maxUses === "" ? -1 : parseInt(form.maxUses),
-      description: `${form.discountType === "percentage" ? form.discount + "%" : "₹" + form.discount} off`,
+      description: `${form.discountType === "percentage" ? form.discount + "%" : "₱" + form.discount} off`,
     };
 
     if (editId) {
@@ -59,6 +62,7 @@ export default function CouponManagement({ coupons, onAddCoupon, onUpdateCoupon,
         <input
           type="text"
           placeholder="Code (e.g., SAVE10)"
+          aria-label="Coupon code"
           value={form.code}
           onChange={(e) => setForm({ ...form, code: e.target.value })}
           maxLength="20"
@@ -67,22 +71,25 @@ export default function CouponManagement({ coupons, onAddCoupon, onUpdateCoupon,
         <input
           type="number"
           placeholder="Discount amount"
+          aria-label="Discount amount"
           value={form.discount}
           onChange={(e) => setForm({ ...form, discount: e.target.value })}
           min="0"
         />
 
         <select
+          aria-label="Discount type"
           value={form.discountType}
           onChange={(e) => setForm({ ...form, discountType: e.target.value })}
         >
           <option value="percentage">Percentage (%)</option>
-          <option value="fixed">Fixed (₹)</option>
+          <option value="fixed">Fixed (₱)</option>
         </select>
 
         <input
           type="number"
           placeholder="Min order amount"
+          aria-label="Minimum order amount"
           value={form.minOrderAmount}
           onChange={(e) => setForm({ ...form, minOrderAmount: e.target.value })}
           min="0"
@@ -91,6 +98,7 @@ export default function CouponManagement({ coupons, onAddCoupon, onUpdateCoupon,
         <input
           type="number"
           placeholder="Max uses (-1 for unlimited)"
+          aria-label="Maximum uses, -1 for unlimited"
           value={form.maxUses}
           onChange={(e) => setForm({ ...form, maxUses: e.target.value })}
           min="-1"
@@ -109,12 +117,12 @@ export default function CouponManagement({ coupons, onAddCoupon, onUpdateCoupon,
       </form>
 
       <ul className="admin-category-list">
-        {coupons.map((coupon) => (
+        {pager.pageItems.map((coupon) => (
           <li key={coupon.id}>
             <div>
               <h3>{coupon.code}</h3>
               <p>{coupon.description}</p>
-              <span>Min: ₹{coupon.minOrderAmount} | Uses: {coupon.maxUses === -1 ? "∞" : coupon.usedCount + "/" + coupon.maxUses}</span>
+              <span>Min: ₱{coupon.minOrderAmount} | Uses: {coupon.maxUses === -1 ? "∞" : coupon.usedCount + "/" + coupon.maxUses}</span>
             </div>
             <div className="admin-item-actions">
               <button
@@ -135,6 +143,7 @@ export default function CouponManagement({ coupons, onAddCoupon, onUpdateCoupon,
           </li>
         ))}
       </ul>
+      <Pagination pager={pager} buttonClass="admin-btn admin-btn-light" label="coupons" />
     </section>
   );
 }

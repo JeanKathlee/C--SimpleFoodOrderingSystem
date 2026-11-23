@@ -1,4 +1,5 @@
 import { useMemo, useState, useRef } from "react";
+import { IMAGE_ACCEPT, checkImageFile } from "../../lib/imageUpload";
 
 const EMPTY_FORM = {
   name: "",
@@ -31,6 +32,7 @@ export default function MenuManagement({
     categoryId: categories[0]?.id || "",
   });
   const [editId, setEditId] = useState(null);
+  const [imageError, setImageError] = useState("");
   const fileInputRef = useRef(null);
 
   const groupedItems = useMemo(() => {
@@ -48,6 +50,13 @@ export default function MenuManagement({
     const file = event.target.files[0];
     if (!file) return;
 
+    const problem = checkImageFile(file);
+    setImageError(problem || "");
+    if (problem) {
+      event.target.value = "";
+      return;
+    }
+
     const reader = new FileReader();
     reader.onloadend = () => {
       setForm((current) => ({
@@ -61,6 +70,7 @@ export default function MenuManagement({
 
   const resetForm = () => {
     setEditId(null);
+    setImageError("");
     setForm({
       ...EMPTY_FORM,
       categoryId: categories[0]?.id || "",
@@ -119,6 +129,7 @@ export default function MenuManagement({
         <input
           type="text"
           placeholder="Menu item name"
+          aria-label="Menu item name"
           value={form.name}
           onChange={(event) => handleInput("name", event.target.value)}
         />
@@ -126,11 +137,13 @@ export default function MenuManagement({
         <textarea
           className="admin-form-textarea"
           placeholder="Item description"
+          aria-label="Item description"
           value={form.description}
           onChange={(event) => handleInput("description", event.target.value)}
         />
 
         <select
+          aria-label="Category"
           value={form.categoryId}
           onChange={(event) => handleInput("categoryId", event.target.value)}
         >
@@ -145,6 +158,7 @@ export default function MenuManagement({
           type="number"
           min="1"
           placeholder="Price"
+          aria-label="Price"
           value={form.price}
           onChange={(event) => handleInput("price", event.target.value)}
         />
@@ -153,6 +167,7 @@ export default function MenuManagement({
           type="number"
           min="1"
           placeholder="Prep time (min)"
+          aria-label="Prep time in minutes"
           value={form.prepTime}
           onChange={(event) => handleInput("prepTime", event.target.value)}
         />
@@ -161,10 +176,18 @@ export default function MenuManagement({
           <input
             className="admin-file-input"
             type="file"
-            accept="image/*"
+            aria-label="Menu item image"
+            aria-describedby="menu-image-error"
+            accept={IMAGE_ACCEPT}
             onChange={handleImageChange}
             ref={fileInputRef}
           />
+
+          {imageError && (
+            <span id="menu-image-error" className="admin-field-error" role="alert">
+              {imageError}
+            </span>
+          )}
 
           {form.imagePreview && (
             <img

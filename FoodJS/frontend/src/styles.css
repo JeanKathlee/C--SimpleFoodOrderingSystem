@@ -5562,3 +5562,54 @@ body {
     font-size: 13px;
   }
 }
+
+/* Shared pagination (components/Pagination.jsx) */
+.pager {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  justify-content: space-between;
+  gap: 10px;
+  margin-top: 14px;
+  font-size: 14px;
+  color: var(--muted-600);
+}
+
+.pager-controls {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+
+.pager-page {
+  font-weight: 600;
+  white-space: nowrap;
+}
+
+.pager button {
+  min-height: 40px;
+  min-width: 88px;
+}
+
+.pager button:disabled {
+  opacity: 0.5;
+  cursor: not-allowed;
+  transform: none;
+  box-shadow: none;
+}
+
+/* Visible keyboard focus everywhere; mouse clicks stay ring-free */
+:where(a, button, select, summary, [role="button"], [tabindex]):focus-visible {
+  outline: 2px solid #f97316;
+  outline-offset: 2px;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+  }
+}

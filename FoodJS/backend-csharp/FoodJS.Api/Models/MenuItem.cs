@@ -14,6 +14,8 @@ public class MenuItem
 
     public bool IsAvailable { get; set; } = true;
 
+    public bool IsDeleted { get; set; }
+
     public int SoldCount { get; set; }
 
     public string? Image { get; set; }

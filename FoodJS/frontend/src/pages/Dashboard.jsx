@@ -11,6 +11,7 @@ import CategoryManagement from "../components/admin/CategoryManagement";
 import CouponManagement from "../components/admin/CouponManagement";
 import PopularItems from "../components/admin/PopularItems";
 import ConfirmModal from "../components/admin/ConfirmModal";
+import CustomersPanel from "../components/admin/CustomersPanel";
 import { useNotification } from "../hooks/useNotification";
 import "../dashboard.css";
 
@@ -89,7 +90,8 @@ function normalizeOrders(items = []) {
       total,
       itemCount,
       createdAt: order.createdAt || new Date().toISOString(),
-      items: order.items || []
+      items: order.items || [],
+      userId: order.userId,
     };
   });
 }
@@ -124,6 +126,8 @@ export default function Dashboard() {
   const [menuItems, setMenuItems] = useState([]);
   const [coupons, setCoupons] = useState([]);
   const [allOrders, setAllOrders] = useState([]);
+  const [customers, setCustomers] = useState([]);
+  const [selectedCustomer, setSelectedCustomer] = useState(null);
   const [weeklyRevenue, setWeeklyRevenue] = useState(DEFAULT_WEEKLY_REVENUE);
   const [statusOptions, setStatusOptions] = useState(DEFAULT_STATUS_OPTIONS);
   const [filters, setFilters] = useState({
@@ -156,19 +160,17 @@ export default function Dashboard() {
 
   const loadAdminData = async () => {
     try {
-      const [categoriesResponse, menuResponse, ordersResponse, insightsResponse, couponsResponse] =
+      const [categoriesResponse, menuResponse, insightsResponse, couponsResponse] =
         await Promise.all([
           fetch("/api/categories"),
           fetch("/api/menu"),
-          fetch("/api/orders"),
-          fetch("/api/admin-insights"),
+          fetch("/api/admin-insights", { headers: { Authorization: `Bearer ${session?.token || ""}` } }),
           fetch("/api/coupons"),
         ]);
 
-      const [categoryData, menuData, , insightData, couponData] = await Promise.all([
+      const [categoryData, menuData, insightData, couponData] = await Promise.all([
         categoriesResponse.json(),
         menuResponse.json(),
-        ordersResponse.json(),
         insightsResponse.json(),
         couponsResponse.json(),
       ]);
@@ -207,6 +209,51 @@ export default function Dashboard() {
     }
   };
 
+  const loadCustomers = async () => {
+    try {
+      const response = await fetch("/api/users", {
+        headers: { Authorization: `Bearer ${session?.token || ""}` },
+      });
+      if (response.ok) {
+        const data = await response.json();
+        setCustomers(Array.isArray(data) ? data.filter((user) => user.role === "customer") : []);
+      }
+    } catch (_error) {
+      errorNotif("Unable to load customers");
+    }
+  };
+
+  const handleUpdateCustomer = async (customerId, changes) => {
+    try {
+      const currentSession = getAuthSession();
+      const response = await fetch(`/api/users/${customerId}`, {
+        method: "PATCH",
+        headers: {
+          "Content-Type": "application/json",
+          Authorization: `Bearer ${currentSession?.token || ""}`,
+        },
+        body: JSON.stringify(changes),
+      });
+      const payload = await response.json();
+
+      if (!response.ok) {
+        errorNotif(payload?.message || "Unable to update customer profile.");
+        return null;
+      }
+
+      setCustomers((current) =>
+        current.map((customer) => (customer.id === payload.id ? payload : customer))
+      );
+      setSelectedCustomer(payload);
+      success("Customer profile updated successfully.");
+      return payload;
+    } catch (error) {
+      console.error("Failed to update customer profile:", error);
+      errorNotif("Unable to update customer profile right now.");
+      return null;
+    }
+  };
+
   const handleUpdateOrderStatus = async (orderId, newStatus) => {
     try {
       const response = await fetch(`/api/orders/${orderId}/status`, {
@@ -240,7 +287,7 @@ export default function Dashboard() {
     setModalConfig({
       open: true,
       title: "Delete order",
-      message: `Order ${orderId}${order?.customerName ? ` for ${order.customerName}` : ""} will be permanently removed from the records.`,
+      message: `Hide order ${orderId}${order?.customerName ? ` for ${order.customerName}` : ""} from order listings? Its saved records will be retained.`,
       confirmLabel: "Delete Order",
       onConfirm: async () => {
         try {
@@ -272,9 +319,11 @@ export default function Dashboard() {
   useEffect(() => {
     loadAdminData();
     loadAllOrders();
+    loadCustomers();
     const pollingId = setInterval(() => {
       loadAdminData();
       loadAllOrders();
+      loadCustomers();
     }, 15000);
 
     return () => clearInterval(pollingId);
@@ -405,7 +454,7 @@ export default function Dashboard() {
     setModalConfig({
       open: true,
       title: "Delete menu item",
-      message: "This action removes the item from the menu list.",
+      message: "Hide this item from the menu? Its saved record and previous order details will be retained.",
       confirmLabel: "Delete Item",
       onConfirm: async () => {
         try {
@@ -706,6 +755,17 @@ export default function Dashboard() {
             isAdmin={true}
             onUpdateStatus={handleUpdateOrderStatus}
             onDeleteOrder={handleDeleteOrder}
+          />
+        )}
+
+        {activeSection === "customers" && (
+          <CustomersPanel
+            customers={customers}
+            orders={allOrders}
+            selectedCustomer={selectedCustomer}
+            onViewCustomer={setSelectedCustomer}
+            onClose={() => setSelectedCustomer(null)}
+            onUpdateCustomer={handleUpdateCustomer}
           />
         )}
 

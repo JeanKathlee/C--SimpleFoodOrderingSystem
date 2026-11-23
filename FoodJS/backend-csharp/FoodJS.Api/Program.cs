@@ -1,9 +1,22 @@
+using FoodJS.Api.Common;
 using FoodJS.Api.Data;
+using FoodJS.Api.Features.Auth;
+using FoodJS.Api.Features.Coupons;
+using FoodJS.Api.Features.Menu;
+using FoodJS.Api.Features.Orders;
+using FoodJS.Api.Features.Users;
+using FoodJS.Api.Repositories;
+using Microsoft.AspNetCore.Authentication.JwtBearer;
+using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
-using FoodJS.Api.Features.Menu;
 
 var builder = WebApplication.CreateBuilder(args);
+
+// secret key for login tokens, don't put real secrets in appsettings.json
+builder.Configuration["Jwt:Secret"] ??= builder.Environment.IsDevelopment()
+    ? "dev-only-jwt-secret-change-me-0123456789"
+    : throw new InvalidOperationException("Jwt:Secret is not configured.");
 
 builder.Services.AddDbContext<FoodJsDbContext>(options =>
     options.UseSqlite(
@@ -12,11 +25,27 @@ builder.Services.AddDbContext<FoodJsDbContext>(options =>
 builder.Logging.ClearProviders();
 builder.Logging.AddConsole();
 
+// The Node API accepted JSON bodies up to 50 MB (menu images are sent as base64).
+builder.WebHost.ConfigureKestrel(options =>
+    options.Limits.MaxRequestBodySize = 50 * 1024 * 1024);
+
 builder.Services
-    .AddControllers()
+    .AddControllers(options => options.Filters.Add<ApiExceptionFilter>())
     .AddJsonOptions(options =>
     {
         options.JsonSerializerOptions.PropertyNamingPolicy = JsonNamingPolicy.CamelCase;
+    })
+    .ConfigureApiBehaviorOptions(options =>
+    {
+        // Node returned { "message": "..." } for bad input; keep that shape instead of ProblemDetails.
+        options.InvalidModelStateResponseFactory = context =>
+        {
+            var message = context.ModelState.Values
+                .SelectMany(entry => entry.Errors)
+                .Select(error => string.IsNullOrWhiteSpace(error.ErrorMessage) ? "Invalid request." : error.ErrorMessage)
+                .FirstOrDefault() ?? "Invalid request.";
+            return new BadRequestObjectResult(new { message });
+        };
     });
 
 builder.Services.AddProblemDetails();
@@ -34,14 +63,78 @@ builder.Services.AddCors(options =>
     });
 });
 
-// Each feature registers its own service here. Replace the in-memory example
-// with an Entity Framework Core implementation when persistence is added.
-builder.Services.AddSingleton<IMenuService, InMemoryMenuService>();
+// Each feature registers its own service here.
+builder.Services.AddScoped<IMenuRepository, MenuRepository>();
+builder.Services.AddScoped<IOrderRepository, OrderRepository>();
+builder.Services.AddScoped<IReferenceDataRepository, ReferenceDataRepository>();
+builder.Services.AddScoped<IUnitOfWorkRepository, UnitOfWorkRepository>();
+builder.Services.AddScoped<IMenuService, MenuService>();
+builder.Services.AddScoped<IOrderService, OrderService>();
+builder.Services.AddScoped<OrderStatusSeeder>();
+builder.Services.AddScoped<ICouponService, CouponService>();
+
+// checks the login token on every request
+// to lock an endpoint add [Authorize], for admin only add [Authorize(Roles = AuthService.AdminRole)]
+builder.Services.AddHttpClient();
+builder.Services.AddScoped<AuthService>();
+builder.Services.AddScoped<UsersService>();
+builder.Services.AddAuthorization();
+builder.Services
+    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.MapInboundClaims = false;
+        options.TokenValidationParameters = new()
+        {
+            ValidateIssuer = false,
+            ValidateAudience = false,
+            IssuerSigningKey = AuthService.SigningKey(builder.Configuration),
+            NameClaimType = "email",
+            RoleClaimType = "role",
+        };
+        // same error messages as the old node api
+        options.Events = new()
+        {
+            OnChallenge = context =>
+            {
+                context.HandleResponse();
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                return context.Response.WriteAsJsonAsync(new
+                {
+                    message = context.AuthenticateFailure is null
+                        ? "Unauthorized. Token required."
+                        : "Unauthorized. Invalid token."
+                });
+            },
+            OnForbidden = context =>
+            {
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                return context.Response.WriteAsJsonAsync(new { message = "Forbidden. Admin access required." });
+            },
+        };
+    });
 
 var app = builder.Build();
 
+// Apply migrations and make sure the order status lookup rows exist.
+using (var scope = app.Services.CreateScope())
+{
+    await scope.ServiceProvider.GetRequiredService<IUnitOfWorkRepository>().MigrateAsync();
+    await scope.ServiceProvider.GetRequiredService<OrderStatusSeeder>().EnsureSeededAsync();
+
+    // demo accounts and the old node menu, only on your own machine
+    if (app.Environment.IsDevelopment())
+    {
+        // Authentication initialization belongs to its feature owner and is unchanged.
+        await AuthService.SeedDevelopmentDataAsync(scope.ServiceProvider.GetRequiredService<FoodJsDbContext>());
+        await scope.ServiceProvider.GetRequiredService<IMenuService>().SeedDevelopmentDataAsync(app.Environment.ContentRootPath);
+    }
+}
+
 app.UseExceptionHandler();
 app.UseCors("Frontend");
+app.UseAuthentication();
+app.UseAuthorization();
 app.MapControllers();
 
 app.Run();

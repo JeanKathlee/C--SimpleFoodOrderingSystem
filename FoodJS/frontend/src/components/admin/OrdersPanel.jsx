@@ -1,3 +1,6 @@
+import Pagination from "../Pagination";
+import usePagination from "../../hooks/usePagination";
+
 function formatDate(value) {
   return new Date(value).toLocaleString("en-PH", {
     month: "short",
@@ -38,6 +41,8 @@ export default function OrdersPanel({
   onUpdateStatus,
   onDeleteOrder,
 }) {
+  const pager = usePagination(orders, 10, JSON.stringify(filters));
+
   return (
     <section className="admin-panel">
       <div className="admin-panel-header">
@@ -123,7 +128,7 @@ export default function OrdersPanel({
                 </td>
               </tr>
             ) : (
-              orders.map((order) => (
+              pager.pageItems.map((order) => (
                 <tr key={order.id}>
                   <td>{order.id}</td>
                   <td>{order.customerName}</td>
@@ -145,6 +150,7 @@ export default function OrdersPanel({
                       <select
                         value=""
                         disabled={isLocked}
+                        aria-label={`Change status of order ${order.id}`}
                         onChange={(e) => {
                           if (e.target.value && onUpdateStatus) {
                             onUpdateStatus(order.id, e.target.value);
@@ -176,6 +182,7 @@ export default function OrdersPanel({
                         type="button"
                         className="admin-btn admin-btn-danger admin-table-action"
                         onClick={() => onDeleteOrder && onDeleteOrder(order.id)}
+                        aria-label={`Delete order ${order.id}`}
                       >
                         Delete
                       </button>
@@ -187,6 +194,7 @@ export default function OrdersPanel({
           </tbody>
         </table>
       </div>
+      <Pagination pager={pager} buttonClass="admin-btn admin-btn-light" label="orders" />
     </section>
   );
 }

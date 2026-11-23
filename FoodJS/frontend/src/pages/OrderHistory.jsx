@@ -2,6 +2,8 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { formatPrice } from "../data/menuItems";
 import { getAuthSession } from "../lib/auth";
+import Pagination from "../components/Pagination";
+import usePagination from "../hooks/usePagination";
 
 export default function OrderHistory() {
   const navigate = useNavigate();
@@ -35,7 +37,8 @@ export default function OrderHistory() {
         if (response.ok) {
           const data = await response.json();
           if (isMounted) {
-            setOrders(data.reverse());
+            // newest first, whatever order the API sends
+            setOrders([...data].sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt)));
           }
         }
       } catch (err) {
@@ -119,6 +122,12 @@ export default function OrderHistory() {
 
     return true;
   });
+
+  const pager = usePagination(
+    filteredOrders,
+    8,
+    [searchId, searchName, filterStatus, filterDateFrom, filterDateTo].join("|")
+  );
 
   if (loading) {
     return <div className="page-loading">Loading...</div>;
@@ -225,12 +234,22 @@ export default function OrderHistory() {
             )}
           </section>
         ) : (
+          <>
           <section className="history-list">
-            {filteredOrders.map((order) => (
+            {pager.pageItems.map((order) => (
               <article
                 key={order.id}
                 className="panel-card history-card"
+                role="link"
+                tabIndex={0}
+                aria-label={`Track order ${order.id}`}
                 onClick={() => navigate(`/order-tracking/${order.id}`)}
+                onKeyDown={(event) => {
+                  if (event.key === "Enter" || event.key === " ") {
+                    event.preventDefault();
+                    navigate(`/order-tracking/${order.id}`);
+                  }
+                }}
               >
                 <div>
                   <h3>Order {order.id}</h3>
@@ -244,6 +263,8 @@ export default function OrderHistory() {
               </article>
             ))}
           </section>
+          <Pagination pager={pager} buttonClass="client-btn" label="orders" />
+          </>
         )}
       </div>
     </div>

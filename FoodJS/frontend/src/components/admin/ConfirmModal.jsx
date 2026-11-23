@@ -1,3 +1,5 @@
+import { useEffect } from "react";
+
 export default function ConfirmModal({
   open,
   title,
@@ -9,6 +11,14 @@ export default function ConfirmModal({
   onCancel,
   onConfirm,
 }) {
+  // Esc works like Cancel
+  useEffect(() => {
+    if (!open) return undefined;
+    const handleKey = (event) => event.key === "Escape" && onCancel?.();
+    window.addEventListener("keydown", handleKey);
+    return () => window.removeEventListener("keydown", handleKey);
+  }, [open, onCancel]);
+
   if (!open) {
     return null;
   }

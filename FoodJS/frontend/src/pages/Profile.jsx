@@ -3,6 +3,7 @@ import { useNavigate } from "react-router-dom";
 import DeliveryMapPicker from "../components/DeliveryMapPicker";
 import { getAuthSession, saveAuthSession } from "../lib/auth";
 import { useNotification } from "../hooks/useNotification";
+import { IMAGE_ACCEPT, checkImageFile } from "../lib/imageUpload";
 
 const emptyProfile = {
   firstName: "",
@@ -81,6 +82,13 @@ export default function Profile() {
   const handleImageChange = (event) => {
     const file = event.target.files?.[0];
     if (!file) {
+      return;
+    }
+
+    const problem = checkImageFile(file);
+    if (problem) {
+      errorNotif(problem);
+      event.target.value = "";
       return;
     }
 
@@ -186,7 +194,7 @@ export default function Profile() {
             <div className="profile-upload">
               <label className="client-btn ghost">
                 Upload Photo
-                <input type="file" accept="image/*" onChange={handleImageChange} />
+                <input type="file" accept={IMAGE_ACCEPT} onChange={handleImageChange} />
               </label>
               {previewImage && (
                 <button type="button" className="client-btn ghost" onClick={handleRemoveImage}>
