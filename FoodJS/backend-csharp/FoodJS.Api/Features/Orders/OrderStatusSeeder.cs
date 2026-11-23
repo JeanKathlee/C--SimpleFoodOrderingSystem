@@ -1,11 +1,10 @@
-using FoodJS.Api.Data;
+using FoodJS.Api.Repositories;
 using FoodJS.Api.Models;
-using Microsoft.EntityFrameworkCore;
 
 namespace FoodJS.Api.Features.Orders;
 
 // Seeds the OrderStatuses table with the default statuses if they are missing. This is called from Program.cs on startup.
-public static class OrderStatusSeeder
+public sealed class OrderStatusSeeder(IReferenceDataRepository referenceData, IUnitOfWorkRepository unitOfWork)
 {
     private static readonly (string Name, string Description)[] Defaults =
     [
@@ -16,20 +15,17 @@ public static class OrderStatusSeeder
         (OrderStatusRules.Cancelled, "Order was cancelled.")
     ];
 
-    public static async Task EnsureSeededAsync(FoodJsDbContext db, CancellationToken ct = default)
+    public async Task EnsureSeededAsync(CancellationToken ct = default)
     {
-        var existing = await db.OrderStatuses.Select(status => status.Name).ToListAsync(ct);
+        var existing = await referenceData.ListStatusNamesAsync(ct);
         var missing = Defaults.Where(entry => !existing.Contains(entry.Name)).ToList();
         if (missing.Count == 0)
         {
             return;
         }
 
-        db.OrderStatuses.AddRange(missing.Select(entry => new OrderStatus
-        {
-            Name = entry.Name,
-            Description = entry.Description
-        }));
-        await db.SaveChangesAsync(ct);
+        foreach (var entry in missing)
+            referenceData.AddStatus(new OrderStatus { Name = entry.Name, Description = entry.Description });
+        await unitOfWork.SaveAsync(ct);
     }
 }

@@ -1,12 +1,11 @@
 using FoodJS.Api.Common;
-using FoodJS.Api.Data;
+using FoodJS.Api.Repositories;
 using FoodJS.Api.Features.Checkout;
 using FoodJS.Api.Models;
-using Microsoft.EntityFrameworkCore;
 
 namespace FoodJS.Api.Features.Orders;
 
-public sealed class OrderService(FoodJsDbContext db) : IOrderService
+public sealed class OrderService(IOrderRepository orders, IMenuRepository menu, IReferenceDataRepository referenceData, IUnitOfWorkRepository unitOfWork) : IOrderService
 {
     // Addresses.City is required by the schema, but checkout only collects one free-text
     // address (map picker / typed). The full text goes into AddressLine1.
@@ -16,10 +15,10 @@ public sealed class OrderService(FoodJsDbContext db) : IOrderService
     // ---- Order Management: List / View / Track --------------------------------------
 
     public async Task<IReadOnlyList<OrderResponse>> ListForUserAsync(int userId, CancellationToken ct = default) =>
-        await BuildResponsesAsync(db.Orders.Where(order => order.UserId == userId), ct);
+        await BuildResponsesAsync(userId, null, ct);
 
     public async Task<IReadOnlyList<OrderResponse>> ListAllAsync(CancellationToken ct = default) =>
-        await BuildResponsesAsync(db.Orders, ct);
+        await BuildResponsesAsync(null, null, ct);
 
     public async Task<OrderResponse?> GetForUserAsync(int userId, string publicId, CancellationToken ct = default)
     {
@@ -28,9 +27,8 @@ public sealed class OrderService(FoodJsDbContext db) : IOrderService
             return null;
         }
 
-        var orders = await BuildResponsesAsync(
-            db.Orders.Where(order => order.Id == id && order.UserId == userId), ct);
-        return orders.FirstOrDefault();
+        var responses = await BuildResponsesAsync(userId, id, ct);
+        return responses.FirstOrDefault();
     }
 
     // ---- Checkout: Place Order (+ Add Address, Apply Coupon) --------------------------
@@ -48,15 +46,15 @@ public sealed class OrderService(FoodJsDbContext db) : IOrderService
             throw new ApiException(StatusCodes.Status400BadRequest, "Customer name is required.");
         }
 
-        var user = await db.Users.FirstOrDefaultAsync(entry => entry.Id == userId, ct)
+        await using var transaction = await unitOfWork.BeginTransactionAsync(ct);
+
+        var user = await referenceData.FindUserAsync(userId, ct)
             ?? throw new ApiException(StatusCodes.Status401Unauthorized, "Unauthorized. User not found.");
 
         // 1. Price every line from the menu, never from the client.
         var quantities = MergeLines(request.Items);
         var menuIds = quantities.Keys.ToList();
-        var menuItems = await db.MenuItems
-            .Where(item => menuIds.Contains(item.Id))
-            .ToDictionaryAsync(item => item.Id, ct);
+        var menuItems = (await menu.FindManyAsync(menuIds, ct)).ToDictionary(item => item.Id);
 
         var lines = new List<(MenuItem Item, int Quantity, decimal LineTotal)>();
         foreach (var (menuId, quantity) in quantities)
@@ -86,7 +84,7 @@ public sealed class OrderService(FoodJsDbContext db) : IOrderService
         var couponCode = request.CouponCode?.Trim();
         if (!string.IsNullOrEmpty(couponCode))
         {
-            coupon = await db.Coupons.FirstOrDefaultAsync(entry => entry.Code == couponCode, ct);
+            coupon = await referenceData.FindCouponAsync(couponCode, ct);
             var check = CouponRules.Evaluate(couponCode, coupon, subtotal, DateOnly.FromDateTime(DateTime.UtcNow));
             if (!check.Valid)
             {
@@ -104,8 +102,6 @@ public sealed class OrderService(FoodJsDbContext db) : IOrderService
         var pendingStatus = await GetStatusRowAsync(OrderStatusRules.Pending, ct);
         var now = DateTimeOffset.UtcNow;
 
-        await using var transaction = await db.Database.BeginTransactionAsync(ct);
-
         var order = new Order
         {
             UserId = userId,
@@ -116,9 +112,9 @@ public sealed class OrderService(FoodJsDbContext db) : IOrderService
             CreatedAt = now,
             UpdatedAt = now
         };
-        db.Orders.Add(order);
+        orders.Add(order);
 
-        db.OrderItems.AddRange(lines.Select(line => new OrderItem
+        orders.AddItems(lines.Select(line => new OrderItem
         {
             Order = order,
             MenuItemId = line.Item.Id,
@@ -128,7 +124,7 @@ public sealed class OrderService(FoodJsDbContext db) : IOrderService
             LineTotal = line.LineTotal
         }));
 
-        db.Payments.Add(new Payment
+        orders.AddPayment(new Payment
         {
             Order = order,
             PaymentMethod = string.IsNullOrWhiteSpace(request.PaymentMethod)
@@ -138,7 +134,7 @@ public sealed class OrderService(FoodJsDbContext db) : IOrderService
             PaymentStatus = "Pending"
         });
 
-        db.OrderStatusHistories.Add(new OrderStatusHistory
+        orders.AddHistory(new OrderStatusHistory
         {
             Order = order,
             FromStatus = string.Empty,
@@ -149,9 +145,9 @@ public sealed class OrderService(FoodJsDbContext db) : IOrderService
         });
 
         // Save once so the order has its generated id for the notification text.
-        await db.SaveChangesAsync(ct);
+        await unitOfWork.SaveAsync(ct);
 
-        db.Notifications.Add(NewStatusNotification(userId, order.Id, OrderStatusRules.Pending, now));
+        orders.AddNotification(NewStatusNotification(userId, order.Id, OrderStatusRules.Pending, now));
 
         if (coupon is not null)
         {
@@ -165,7 +161,7 @@ public sealed class OrderService(FoodJsDbContext db) : IOrderService
             user.MobileNumber = mobile;
         }
 
-        await db.SaveChangesAsync(ct);
+        await unitOfWork.SaveAsync(ct);
         await transaction.CommitAsync(ct);
 
         return await GetSingleAsync(order.Id, ct);
@@ -180,9 +176,7 @@ public sealed class OrderService(FoodJsDbContext db) : IOrderService
             return null;
         }
 
-        var order = await db.Orders
-            .Include(entry => entry.OrderStatus)
-            .FirstOrDefaultAsync(entry => entry.Id == id && entry.UserId == userId, ct);
+        var order = await orders.FindAsync(id, userId, ct);
         if (order is null)
         {
             return null;
@@ -206,9 +200,7 @@ public sealed class OrderService(FoodJsDbContext db) : IOrderService
             return null;
         }
 
-        var order = await db.Orders
-            .Include(entry => entry.OrderStatus)
-            .FirstOrDefaultAsync(entry => entry.Id == id, ct);
+        var order = await orders.FindAsync(id, ct: ct);
         if (order is null)
         {
             return null;
@@ -253,23 +245,11 @@ public sealed class OrderService(FoodJsDbContext db) : IOrderService
             return false;
         }
 
-        var order = await db.Orders.FirstOrDefaultAsync(entry => entry.Id == id, ct);
-        if (order is null)
-        {
-            return false;
-        }
-
-        // Notifications.OrderId has no cascade; detach them so the customer keeps their history.
-        var notifications = await db.Notifications.Where(entry => entry.OrderId == id).ToListAsync(ct);
-        foreach (var notification in notifications)
-        {
-            notification.Order = null;
-            notification.OrderId = null;
-        }
-
-        // Order items, payment and status history are removed by their Cascade foreign keys.
-        db.Orders.Remove(order);
-        await db.SaveChangesAsync(ct);
+        var order = await orders.FindAsync(id, ct: ct);
+        if (order is null) return false;
+        order.IsDeleted = true;
+        order.UpdatedAt = DateTimeOffset.UtcNow;
+        await unitOfWork.SaveAsync(ct);
         return true;
     }
 
@@ -285,19 +265,19 @@ public sealed class OrderService(FoodJsDbContext db) : IOrderService
         order.OrderStatus = statusRow;
         order.UpdatedAt = now;
 
-        db.OrderStatusHistories.Add(new OrderStatusHistory
+        orders.AddHistory(new OrderStatusHistory
         {
             OrderId = order.Id,
             FromStatus = from,
             ToStatus = to,
             // ChangedByUserId is a foreign key; skip it when the token's user is not in the table.
-            ChangedByUserId = await db.Users.AnyAsync(user => user.Id == actorId, ct) ? actorId : null,
+            ChangedByUserId = await referenceData.UserExistsAsync(actorId, ct) ? actorId : null,
             Source = source,
             ChangedAt = now
         });
 
-        db.Notifications.Add(NewStatusNotification(order.UserId, order.Id, to, now));
-        await db.SaveChangesAsync(ct);
+        orders.AddNotification(NewStatusNotification(order.UserId, order.Id, to, now));
+        await unitOfWork.SaveAsync(ct);
     }
 
     // The notifications API (coupons/notifications owner) reads these rows. Type carries the
@@ -314,7 +294,7 @@ public sealed class OrderService(FoodJsDbContext db) : IOrderService
     };
 
     private async Task<OrderStatus> GetStatusRowAsync(string name, CancellationToken ct) =>
-        await db.OrderStatuses.FirstOrDefaultAsync(status => status.Name == name, ct)
+        await referenceData.FindStatusAsync(name, ct)
         ?? throw new InvalidOperationException(
             $"Order status '{name}' is missing. Run OrderStatusSeeder.EnsureSeededAsync at startup.");
 
@@ -327,8 +307,7 @@ public sealed class OrderService(FoodJsDbContext db) : IOrderService
         }
 
         var lowered = text.ToLower();
-        var existing = await db.Addresses
-            .FirstOrDefaultAsync(entry => entry.UserId == userId && entry.AddressLine1.ToLower() == lowered, ct);
+        var existing = await referenceData.FindAddressAsync(userId, lowered, ct);
         if (existing is not null)
         {
             return existing;
@@ -341,7 +320,7 @@ public sealed class OrderService(FoodJsDbContext db) : IOrderService
             City = UnspecifiedCity,
             IsDefault = false
         };
-        db.Addresses.Add(created);
+        referenceData.AddAddress(created);
         return created;
     }
 
@@ -371,52 +350,18 @@ public sealed class OrderService(FoodJsDbContext db) : IOrderService
 
     private async Task<OrderResponse> GetSingleAsync(int orderId, CancellationToken ct)
     {
-        var orders = await BuildResponsesAsync(db.Orders.Where(order => order.Id == orderId), ct);
-        return orders.First();
+        var responses = await BuildResponsesAsync(null, orderId, ct);
+        return responses.First();
     }
 
-    // The Order entity has no collection navigations, so children are loaded in four
-    // batched queries and stitched together. Sorting happens in memory because the
-    // SQLite provider cannot ORDER BY a DateTimeOffset column.
-    private async Task<IReadOnlyList<OrderResponse>> BuildResponsesAsync(
-        IQueryable<Order> query, CancellationToken ct)
+    private async Task<IReadOnlyList<OrderResponse>> BuildResponsesAsync(int? userId, int? orderId, CancellationToken ct)
     {
-        var orders = await query
-            .AsNoTracking()
-            .Include(order => order.User)
-            .Include(order => order.OrderStatus)
-            .Include(order => order.Address)
-            .ToListAsync(ct);
-
-        if (orders.Count == 0)
-        {
-            return [];
-        }
-
-        var ids = orders.Select(order => order.Id).ToList();
-        var items = await db.OrderItems.AsNoTracking().Where(line => ids.Contains(line.OrderId)).ToListAsync(ct);
-        var payments = await db.Payments.AsNoTracking().Where(payment => ids.Contains(payment.OrderId)).ToListAsync(ct);
-        var history = await db.OrderStatusHistories.AsNoTracking()
-            .Where(entry => ids.Contains(entry.OrderId)).ToListAsync(ct);
-
-        var itemsByOrder = items.ToLookup(line => line.OrderId);
-        var paymentByOrder = payments.GroupBy(payment => payment.OrderId)
-            .ToDictionary(group => group.Key, group => group.First());
-        var historyByOrder = history.ToLookup(entry => entry.OrderId);
-
-        return orders
-            .OrderByDescending(order => order.CreatedAt)
-            .ThenByDescending(order => order.Id)
-            .Select(order => ToResponse(
-                order,
-                itemsByOrder[order.Id].OrderBy(line => line.Id).ToList(),
-                paymentByOrder.GetValueOrDefault(order.Id),
-                historyByOrder[order.Id].OrderBy(entry => entry.ChangedAt).ThenBy(entry => entry.Id).ToList()))
-            .ToList();
+        var records = await orders.LoadAsync(userId, orderId, ct);
+        return records.Select(record => ToResponse(record.Order, record.Items, record.Payment, record.History)).ToList();
     }
 
     private static OrderResponse ToResponse(
-        Order order, List<OrderItem> items, Payment? payment, List<OrderStatusHistory> history)
+        Order order, IReadOnlyList<OrderItem> items, Payment? payment, IReadOnlyList<OrderStatusHistory> history)
     {
         var subtotal = items.Sum(line => line.LineTotal);
 

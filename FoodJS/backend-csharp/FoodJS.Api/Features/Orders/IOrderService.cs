@@ -20,6 +20,6 @@ public interface IOrderService
     Task<OrderResponse?> UpdateStatusAsync(
         int adminId, string publicId, UpdateOrderStatusRequest request, CancellationToken ct = default);
 
-    // Admin update of the order items. Null when the order does not exist.
+    // Admin soft deletion. False when the order is missing or already deleted.
     Task<bool> DeleteAsync(string publicId, CancellationToken ct = default);
 }

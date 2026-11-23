@@ -1,53 +1,207 @@
-using System.Text.Json;
 using FoodJS.Api.Common;
-using FoodJS.Api.Data;
+using FoodJS.Api.Repositories;
+using System.Text.Json;
 using FoodJS.Api.Models;
-using Microsoft.EntityFrameworkCore;
 
 namespace FoodJS.Api.Features.Menu;
 
-// reading menu items from the database. add, edit, availability and delete are in EfMenuService
-public sealed class MenuService(FoodJsDbContext db)
+public sealed class MenuService(IMenuRepository menuRepository, IReferenceDataRepository referenceData, IUnitOfWorkRepository unitOfWork) : IMenuService
 {
-    // customers only see items that are available, admins see everything (so they can turn items back on).
-    // search looks in the name and description, category is the category name like "Burgers"
-    public async Task<List<MenuItemResponse>> GetAllAsync(bool showHidden, string? search = null, string? category = null)
+    private const int MaxNameLength = 120;
+    private const int MaxDescriptionLength = 2_000;
+
+    public async Task<IReadOnlyList<MenuItemResponse>> GetAllAsync(bool showHidden, string? search = null, string? category = null, CancellationToken ct = default)
     {
-        var query = Visible(showHidden);
-
-        if (!string.IsNullOrWhiteSpace(search))
-        {
-            var text = search.Trim().ToLower();
-            query = query.Where(m => m.Name.ToLower().Contains(text) || m.Description.ToLower().Contains(text));
-        }
-        if (!string.IsNullOrWhiteSpace(category))
-        {
-            var name = category.Trim().ToLower();
-            query = query.Where(m => m.Category.Name.ToLower() == name);
-        }
-
-        var items = await query.OrderBy(m => m.Id).ToListAsync();
+        var items = await menuRepository.ListAsync(showHidden, NormalizeFilter(search), NormalizeFilter(category), ct);
         return items.Select(ToResponse).ToList();
     }
 
-    // one food item, null if it doesn't exist (or is hidden and you're not an admin)
-    public async Task<MenuItemResponse?> GetAsync(int id, bool showHidden)
+    public async Task<MenuItemResponse?> GetAsync(int id, bool showHidden, CancellationToken ct = default)
     {
-        var item = await Visible(showHidden).FirstOrDefaultAsync(m => m.Id == id);
-        return item is null ? null : ToResponse(item);
+        var item = await menuRepository.FindAsync(id, ct);
+        return item is null || (!showHidden && !item.IsAvailable) ? null : ToResponse(item);
     }
 
-    private IQueryable<MenuItem> Visible(bool showHidden) =>
-        db.MenuItems.Include(m => m.Category).Where(m => showHidden || m.IsAvailable);
+    private static string? NormalizeFilter(string? value) => string.IsNullOrWhiteSpace(value) ? null : value.Trim().ToLowerInvariant();
 
-    private static MenuItemResponse ToResponse(MenuItem m) => new(
-        PublicId.Menu(m.Id), m.Name, m.Description, PublicId.Category(m.CategoryId), m.Category.Name,
-        m.Price, m.PrepTime, m.IsAvailable, m.SoldCount, m.Image, m.CreatedAt, m.UpdatedAt);
+    public async Task<MenuItemResponse> CreateAsync(
+        SaveMenuItemRequest request, int? adminId, CancellationToken ct = default)
+    {
+        var input = Validate(request);
+        var category = await FindCategoryAsync(input.CategoryId, ct);
+        var now = DateTimeOffset.UtcNow;
+
+        var item = new MenuItem
+        {
+            Name = input.Name,
+            Description = request.Description ?? string.Empty,
+            Price = input.Price,
+            PrepTime = input.PrepTime,
+            IsAvailable = request.IsAvailable != false,
+            Image = NormalizeImage(request.Image),
+            CategoryId = category.Id,
+            Category = category,
+            CreatedByAdminId = await ResolveAdminIdAsync(adminId, ct),
+            CreatedAt = now,
+            UpdatedAt = now
+        };
+
+        menuRepository.Add(item);
+        await unitOfWork.SaveAsync(ct);
+        return ToResponse(item);
+    }
+
+    public async Task<MenuItemResponse?> UpdateAsync(
+        int id, SaveMenuItemRequest request, CancellationToken ct = default)
+    {
+        var item = await menuRepository.FindAsync(id, ct);
+
+        if (item is null)
+        {
+            return null;
+        }
+
+        var input = Validate(request);
+        var category = await FindCategoryAsync(input.CategoryId, ct);
+
+        item.Name = input.Name;
+        item.Description = request.Description ?? item.Description;
+        item.Price = input.Price;
+        item.PrepTime = input.PrepTime;
+        item.IsAvailable = request.IsAvailable ?? item.IsAvailable;
+        item.CategoryId = category.Id;
+        item.Category = category;
+        if (request.Image is not null)
+        {
+            item.Image = NormalizeImage(request.Image);
+        }
+
+        item.UpdatedAt = DateTimeOffset.UtcNow;
+
+        await unitOfWork.SaveAsync(ct);
+        return ToResponse(item);
+    }
+
+    public async Task<MenuItemResponse?> SetAvailabilityAsync(
+        int id, bool? isAvailable, CancellationToken ct = default)
+    {
+        var item = await menuRepository.FindAsync(id, ct);
+
+        if (item is null)
+        {
+            return null;
+        }
+
+        if (isAvailable is null) throw new ApiException(400, "isAvailable is required.");
+        item.IsAvailable = isAvailable.Value;
+        item.UpdatedAt = DateTimeOffset.UtcNow;
+
+        await unitOfWork.SaveAsync(ct);
+        return ToResponse(item);
+    }
+
+    public async Task<bool> DeleteAsync(int id, CancellationToken ct = default)
+    {
+        var item = await menuRepository.FindAsync(id, ct);
+        if (item is null) return false;
+        item.IsDeleted = true;
+        item.UpdatedAt = DateTimeOffset.UtcNow;
+        await unitOfWork.SaveAsync(ct);
+        return true;
+    }
+
+    private sealed record ValidatedInput(string Name, string CategoryId, decimal Price, int PrepTime);
+
+    private static ValidatedInput Validate(SaveMenuItemRequest request)
+    {
+        var name = request.Name?.Trim();
+        if (string.IsNullOrEmpty(name)
+            || string.IsNullOrWhiteSpace(request.CategoryId)
+            || request.Price is null
+            || request.PrepTime is null)
+        {
+            throw new ApiException(
+                StatusCodes.Status400BadRequest,
+                "Name, categoryId, price, and prepTime are required.");
+        }
+
+        if (request.Price <= 0 || request.PrepTime <= 0)
+        {
+            throw new ApiException(
+                StatusCodes.Status400BadRequest,
+                "Price and prepTime must be greater than 0.");
+        }
+
+        if (name.Length > MaxNameLength)
+        {
+            throw new ApiException(
+                StatusCodes.Status400BadRequest,
+                $"Name must be {MaxNameLength} characters or fewer.");
+        }
+
+        if (request.Description is { Length: > MaxDescriptionLength })
+        {
+            throw new ApiException(
+                StatusCodes.Status400BadRequest,
+                $"Description must be {MaxDescriptionLength} characters or fewer.");
+        }
+
+        if (ImageRules.Check(request.Image) is { } imageError)
+        {
+            throw new ApiException(StatusCodes.Status400BadRequest, imageError);
+        }
+
+        return new ValidatedInput(name, request.CategoryId.Trim(), request.Price.Value, request.PrepTime.Value);
+    }
+
+    private async Task<Category> FindCategoryAsync(string publicCategoryId, CancellationToken ct)
+    {
+        if (PublicId.TryParseCategory(publicCategoryId, out var categoryId))
+        {
+            var category = await referenceData.FindCategoryAsync(categoryId, ct);
+            if (category is not null)
+            {
+                return category;
+            }
+        }
+
+        throw new ApiException(StatusCodes.Status400BadRequest, "Invalid categoryId.");
+    }
+
+    // CreatedByAdminId is a foreign key; only store it when that user really exists
+    // (e.g. a demo token may carry an id that is not in the Users table).
+    private async Task<int?> ResolveAdminIdAsync(int? adminId, CancellationToken ct)
+    {
+        if (adminId is null)
+        {
+            return null;
+        }
+
+        var exists = await referenceData.UserExistsAsync(adminId.Value, ct);
+        return exists ? adminId : null;
+    }
+
+    private static string? NormalizeImage(string? image) =>
+        string.IsNullOrWhiteSpace(image) ? null : image;
+
+    private static MenuItemResponse ToResponse(MenuItem item) => new(
+        PublicId.Menu(item.Id),
+        item.Name,
+        item.Description,
+        PublicId.Category(item.CategoryId),
+        item.Category.Name,
+        item.Price,
+        item.PrepTime,
+        item.IsAvailable,
+        item.SoldCount,
+        item.Image,
+        item.CreatedAt,
+        item.UpdatedAt);
 
     // first run only: copies the old node menu (Data/Seed/*.json) into the database
-    public static async Task SeedDevelopmentDataAsync(FoodJsDbContext db, string contentRoot)
+    public async Task SeedDevelopmentDataAsync(string contentRoot, CancellationToken ct = default)
     {
-        if (await db.MenuItems.AnyAsync())
+        if (await menuRepository.AnyIncludingDeletedAsync(ct))
         {
             return;
         }
@@ -59,13 +213,16 @@ public sealed class MenuService(FoodJsDbContext db)
         var categoryById = new Dictionary<string, Category>();
         foreach (var c in categories)
         {
-            categoryById[c.Id] = await db.Categories.FirstOrDefaultAsync(x => x.Name == c.Name)
-                ?? db.Categories.Add(new Category { Name = c.Name, Description = c.Description ?? "" }).Entity;
+            categoryById[c.Id] = await referenceData.FindCategoryByNameAsync(c.Name, ct)
+                ?? new Category { Name = c.Name, Description = c.Description ?? "" };
         }
+
+        foreach (var category in categoryById.Values.Distinct().Where(category => category.Id == 0))
+            referenceData.AddCategory(category);
 
         foreach (var m in menu)
         {
-            db.MenuItems.Add(new MenuItem
+            menuRepository.Add(new MenuItem
             {
                 Name = m.Name,
                 Description = m.Description ?? "",
@@ -77,7 +234,7 @@ public sealed class MenuService(FoodJsDbContext db)
                 Category = categoryById[m.CategoryId],
             });
         }
-        await db.SaveChangesAsync();
+        await unitOfWork.SaveAsync(ct);
     }
 
     private static async Task<SeedFile> ReadSeedAsync(string contentRoot, string fileName)

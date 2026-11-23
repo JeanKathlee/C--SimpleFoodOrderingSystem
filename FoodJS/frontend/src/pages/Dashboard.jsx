@@ -287,7 +287,7 @@ export default function Dashboard() {
     setModalConfig({
       open: true,
       title: "Delete order",
-      message: `Order ${orderId}${order?.customerName ? ` for ${order.customerName}` : ""} will be permanently removed from the records.`,
+      message: `Hide order ${orderId}${order?.customerName ? ` for ${order.customerName}` : ""} from order listings? Its saved records will be retained.`,
       confirmLabel: "Delete Order",
       onConfirm: async () => {
         try {
@@ -454,7 +454,7 @@ export default function Dashboard() {
     setModalConfig({
       open: true,
       title: "Delete menu item",
-      message: "This action removes the item from the menu list.",
+      message: "Hide this item from the menu? Its saved record and previous order details will be retained.",
       confirmLabel: "Delete Item",
       onConfirm: async () => {
         try {

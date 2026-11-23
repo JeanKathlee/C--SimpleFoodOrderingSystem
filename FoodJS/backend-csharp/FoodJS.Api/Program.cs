@@ -5,6 +5,7 @@ using FoodJS.Api.Features.Coupons;
 using FoodJS.Api.Features.Menu;
 using FoodJS.Api.Features.Orders;
 using FoodJS.Api.Features.Users;
+using FoodJS.Api.Repositories;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
@@ -63,9 +64,13 @@ builder.Services.AddCors(options =>
 });
 
 // Each feature registers its own service here.
-builder.Services.AddScoped<IMenuService, EfMenuService>(); // menu add, edit, availability, delete
-builder.Services.AddScoped<MenuService>();                  // menu list, search, filter, details
+builder.Services.AddScoped<IMenuRepository, MenuRepository>();
+builder.Services.AddScoped<IOrderRepository, OrderRepository>();
+builder.Services.AddScoped<IReferenceDataRepository, ReferenceDataRepository>();
+builder.Services.AddScoped<IUnitOfWorkRepository, UnitOfWorkRepository>();
+builder.Services.AddScoped<IMenuService, MenuService>();
 builder.Services.AddScoped<IOrderService, OrderService>();
+builder.Services.AddScoped<OrderStatusSeeder>();
 builder.Services.AddScoped<ICouponService, CouponService>();
 
 // checks the login token on every request
@@ -114,15 +119,15 @@ var app = builder.Build();
 // Apply migrations and make sure the order status lookup rows exist.
 using (var scope = app.Services.CreateScope())
 {
-    var db = scope.ServiceProvider.GetRequiredService<FoodJsDbContext>();
-    await db.Database.MigrateAsync();
-    await OrderStatusSeeder.EnsureSeededAsync(db);
+    await scope.ServiceProvider.GetRequiredService<IUnitOfWorkRepository>().MigrateAsync();
+    await scope.ServiceProvider.GetRequiredService<OrderStatusSeeder>().EnsureSeededAsync();
 
     // demo accounts and the old node menu, only on your own machine
     if (app.Environment.IsDevelopment())
     {
-        await AuthService.SeedDevelopmentDataAsync(db);
-        await MenuService.SeedDevelopmentDataAsync(db, app.Environment.ContentRootPath);
+        // Authentication initialization belongs to its feature owner and is unchanged.
+        await AuthService.SeedDevelopmentDataAsync(scope.ServiceProvider.GetRequiredService<FoodJsDbContext>());
+        await scope.ServiceProvider.GetRequiredService<IMenuService>().SeedDevelopmentDataAsync(app.Environment.ContentRootPath);
     }
 }
 

@@ -4,27 +4,25 @@ using Microsoft.AspNetCore.Mvc;
 
 namespace FoodJS.Api.Features.Menu;
 
-// reading the menu (list, search, filter, details) uses MenuService.
-// changing the menu (add, edit, availability, delete) uses IMenuService (EfMenuService)
 [ApiController]
 [Route("api/menu")]
-public sealed class MenuController(IMenuService menuService, MenuService menuDb) : ControllerBase
+public sealed class MenuController(IMenuService menuService) : ControllerBase
 {
     // anyone can see the menu. if an admin is logged in, hidden items are shown too
     // search and filter: /api/menu?search=fries&category=Sides
     [HttpGet]
-    public async Task<ActionResult<List<MenuItemResponse>>> GetAll(string? search, string? category) =>
-        Ok(await menuDb.GetAllAsync(User.IsInRole(AuthRoles.Admin), search, category));
+    public async Task<ActionResult<IReadOnlyList<MenuItemResponse>>> GetAll(string? search, string? category, CancellationToken ct) =>
+        Ok(await menuService.GetAllAsync(User.IsInRole(AuthRoles.Admin), search, category, ct));
 
     [HttpGet("{id}")]
-    public async Task<ActionResult<MenuItemResponse>> Get(string id)
+    public async Task<ActionResult<MenuItemResponse>> Get(string id, CancellationToken ct)
     {
         if (!PublicId.TryParseMenu(id, out var menuId))
         {
             return NotFoundResult();
         }
 
-        var item = await menuDb.GetAsync(menuId, User.IsInRole(AuthRoles.Admin));
+        var item = await menuService.GetAsync(menuId, User.IsInRole(AuthRoles.Admin), ct);
         return item is null ? NotFoundResult() : Ok(item);
     }
 
@@ -57,17 +55,12 @@ public sealed class MenuController(IMenuService menuService, MenuService menuDb)
     public async Task<ActionResult<MenuItemResponse>> SetAvailability(
         string id, SetAvailabilityRequest request, CancellationToken ct)
     {
-        if (request.IsAvailable is null)
-        {
-            return BadRequest(new { message = "isAvailable is required." });
-        }
-
         if (!PublicId.TryParseMenu(id, out var menuId))
         {
             return NotFoundResult();
         }
 
-        var item = await menuService.SetAvailabilityAsync(menuId, request.IsAvailable.Value, ct);
+        var item = await menuService.SetAvailabilityAsync(menuId, request.IsAvailable, ct);
         return item is null ? NotFoundResult() : Ok(item);
     }
 
