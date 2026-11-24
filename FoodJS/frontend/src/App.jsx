@@ -1,8 +1,8 @@
-import { lazy, Suspense } from "react";
+import { lazy, Suspense, useSyncExternalStore } from "react";
 import { BrowserRouter, Navigate, Routes, Route } from "react-router-dom";
 import { NotificationProvider } from "./context/NotificationContext";
 import { NotificationContainer } from "./components/NotificationContainer";
-import { getUserRole, isAuthenticated } from "./lib/auth";
+import { getAuthToken, getUserRole, isAuthenticated, subscribeToAuthSession } from "./lib/auth";
 
 const Landing = lazy(() => import("./pages/Landing"));
 const Login = lazy(() => import("./pages/Login"));
@@ -43,6 +43,8 @@ function CustomerRoute({ children }) {
 }
 
 export default function App() {
+  useSyncExternalStore(subscribeToAuthSession, getAuthToken);
+
   return (
     <NotificationProvider>
       <BrowserRouter>

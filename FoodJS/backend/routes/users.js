@@ -8,7 +8,13 @@ const { verifyToken, requireAdmin } = require('../middleware/auth');
 const router = express.Router();
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
-const DEMO_MODE = process.env.DEMO_MODE !== 'false';
+
+function isValidEmail(email) {
+  const [local, domain, ...rest] = email.split('@');
+  return email.length <= 254 && rest.length === 0 && local.length <= 64
+    && /^[\w!#$%&'*+/=?^{}|`~-]+(?:\.[\w!#$%&'*+/=?^{}|`~-]+)*$/.test(local)
+    && /^[a-z\d](?:[a-z\d-]{0,61}[a-z\d])?(?:\.[a-z\d](?:[a-z\d-]{0,61}[a-z\d])?)+$/i.test(domain ?? '');
+}
 
 function splitLegacyName(name = '') {
   const parts = String(name).trim().split(/\s+/).filter(Boolean);
@@ -41,42 +47,45 @@ function buildSafeUser(user = {}) {
 }
 
 // Generate ID sa user
-function getNextUserId() {
-  const data = readJsonFromData('users.json');
-  const maxId = Math.max(...(data.users || []).map(u => u.id), 0);
+function getNextUserId(users) {
+  const maxId = Math.max(...users.map(u => u.id), 0);
   return maxId + 1;
 }
 
 // POST method, Create new user account
 router.post('/register', async (req, res) => {
-  const { email, password, firstName, lastName, mobileNumber, address } = req.body || {};
+  const { email: rawEmail, password, firstName, lastName, mobileNumber, address } = req.body || {};
+  const email = typeof rawEmail === 'string' ? rawEmail.trim() : '';
   const cleanFirstName = String(firstName || '').trim();
   const cleanLastName = String(lastName || '').trim();
 
-  if (!email || !password || !cleanFirstName || !cleanLastName) {
+  if (!email || typeof password !== 'string' || !password || !cleanFirstName || !cleanLastName) {
     return res
       .status(400)
       .json({ message: 'Email, password, first name, and last name are required.' });
+  }
+
+  if (!isValidEmail(email)) {
+    return res.status(400).json({ message: 'Please enter a valid email.' });
   }
 
   if (password.length < 6) {
     return res.status(400).json({ message: 'Password must be at least 6 characters.' });
   }
 
+  const passwordHash = await bcrypt.hash(password, 10);
   const data = readJsonFromData('users.json');
   
   const existingUser = (data.users || []).find(
-    (user) => String(user.email).toLowerCase() === String(email).toLowerCase()
+    (user) => String(user.email).trim().toLowerCase() === email.toLowerCase()
   );
 
   if (existingUser) {
     return res.status(400).json({ message: 'Email already in use.' });
   }
 
-  const passwordHash = await bcrypt.hash(password, 10);
-
   const newUser = {
-    id: getNextUserId(),
+    id: getNextUserId(data.users || []),
     firstName: cleanFirstName,
     lastName: cleanLastName,
     name: `${cleanFirstName} ${cleanLastName}`.trim(),
@@ -112,24 +121,19 @@ router.post('/register', async (req, res) => {
 
 // POST method, authenticate user
 router.post('/login', async (req, res) => {
-  const { email, password } = req.body || {};
+  const { email: rawEmail, password } = req.body || {};
+  const email = typeof rawEmail === 'string' ? rawEmail.trim() : '';
 
-  if (!email || !password) {
+  if (!email || typeof password !== 'string' || !password) {
     return res.status(400).json({ message: 'Email and password are required.' });
   }
 
   const data = readJsonFromData('users.json');
-  const requestedUser = (data.users || []).find(
-    (item) => String(item.email).toLowerCase() === String(email).toLowerCase()
+  const user = (data.users || []).find(
+    (item) => String(item.email).trim().toLowerCase() === email.toLowerCase()
   );
 
-  const isMatch = requestedUser
-    ? await bcrypt.compare(password, requestedUser.passwordHash)
-    : false;
-  const demoCustomer = (data.users || []).find((item) => item.role === 'customer');
-  const user = isMatch ? requestedUser : DEMO_MODE ? demoCustomer : null;
-
-  if (!user) {
+  if (!user?.passwordHash || !(await bcrypt.compare(password, user.passwordHash))) {
     return res.status(401).json({ message: 'Invalid email or password.' });
   }
 
@@ -140,7 +144,7 @@ router.post('/login', async (req, res) => {
   );
 
   return res.json({
-    message: isMatch ? 'Login successful.' : 'Demo login successful.',
+    message: 'Login successful.',
     token,
     user: buildSafeUser(user),
   });

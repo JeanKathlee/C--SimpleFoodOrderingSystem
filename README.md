@@ -58,7 +58,7 @@ Set `VITE_GOOGLE_CLIENT_ID` in `FoodJS/frontend/.env.local` to that client's ID.
 
 For the hosted app, register its exact HTTPS URL followed by `/auth/callback` with Google, configure the same OAuth client in the frontend build and backend runtime, and rebuild the frontend. The callback defaults to the app's current origin. If you set `VITE_GOOGLE_REDIRECT_URI`, use the registered callback on that same origin.
 
-`DEMO_MODE` defaults to enabled so portfolio visitors can enter any email and password to explore the customer experience. Set `DEMO_MODE=false` to require registered credentials.
+Sign-in checks the supplied credentials and each customer uses their own account. To try the customer flow with Express, register a customer account.
 
 Demo administrator access: `admin@foodjs.demo` / `admin123`.
 

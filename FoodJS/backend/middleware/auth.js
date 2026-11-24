@@ -1,12 +1,6 @@
 const jwt = require('jsonwebtoken');
 
 const JWT_SECRET = process.env.JWT_SECRET || 'dev-secret-change-me';
-const DEMO_MODE = process.env.DEMO_MODE !== 'false';
-const DEMO_CUSTOMER = {
-  sub: 2,
-  email: 'customer@foodjs.demo',
-  role: 'customer',
-};
 
 // Verify Json web token
 function verifyToken(req, res, next) {
@@ -18,20 +12,11 @@ function verifyToken(req, res, next) {
   }
 
   try {
-    const decoded = jwt.verify(token, JWT_SECRET);
-    req.user = DEMO_MODE && decoded.role === 'customer'
-      ? { ...decoded, ...DEMO_CUSTOMER }
-      : decoded;
-    next();
+    req.user = jwt.verify(token, JWT_SECRET);
   } catch (_err) {
-    // Portfolio demos should survive server restarts that rotate or reset JWT secrets.
-    if (DEMO_MODE) {
-      req.user = DEMO_CUSTOMER;
-      return next();
-    }
-
     return res.status(401).json({ message: 'Unauthorized. Invalid token.' });
   }
+  next();
 }
 
 // Check sa user if admin

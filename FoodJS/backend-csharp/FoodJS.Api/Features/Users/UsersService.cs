@@ -40,7 +40,7 @@ public sealed class UsersService(FoodJsDbContext db, AuthService authService)
         {
             throw new BadHttpRequestException("Email, password, first name, and last name are required.");
         }
-        if (!MailAddress.TryCreate(email, out _))
+        if (!IsValidEmail(email))
         {
             throw new BadHttpRequestException("Please enter a valid email.");
         }
@@ -73,6 +73,21 @@ public sealed class UsersService(FoodJsDbContext db, AuthService authService)
 
         // log them in right away, same as the old node api
         return await authService.CreateSessionAsync(user, "Account created successfully.");
+    }
+
+    private static bool IsValidEmail(string email)
+    {
+        if (email.Length > 254 || email.Any(char.IsWhiteSpace) ||
+            !MailAddress.TryCreate(email, out var parsed) || parsed.Address != email ||
+            parsed.User.Length > 64 || parsed.User.Split('.').Any(string.IsNullOrEmpty))
+        {
+            return false;
+        }
+
+        var labels = parsed.Host.Split('.');
+        return labels.Length > 1 && labels.All(label =>
+            label.Length is >= 1 and <= 63 && char.IsAsciiLetterOrDigit(label[0]) &&
+            char.IsAsciiLetterOrDigit(label[^1]) && label.All(c => char.IsAsciiLetterOrDigit(c) || c == '-'));
     }
 
     // returns null if the user doesn't exist
