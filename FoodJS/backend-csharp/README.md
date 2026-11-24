@@ -93,6 +93,7 @@ When you run the API on your computer, it makes the tables and adds 2 demo users
 Don't put secrets in `appsettings.json`. Set them like this:
 
 ```powershell
+dotnet user-secrets set "Google:ClientId" "<same ID as VITE_GOOGLE_CLIENT_ID>" --project backend-csharp/FoodJS.Api
 dotnet user-secrets set "Google:ClientSecret" "<secret>" --project backend-csharp/FoodJS.Api
 dotnet user-secrets set "Jwt:Secret" "<32+ random characters>" --project backend-csharp/FoodJS.Api
 ```

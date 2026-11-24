@@ -3,6 +3,7 @@ import { motion as Motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
 import { saveAuthSession, isAuthenticated, getAuthSession } from "../lib/auth";
+import { startGoogleSignIn } from "../lib/googleOAuth";
 import logo from "../../assets/logo.png";
 
 export default function Register() {
@@ -66,19 +67,6 @@ export default function Register() {
     } finally {
       setLoading(false);
     }
-  };
-
-  const handleGoogleLogin = () => {
-    const clientId = "383406826534-8al6042a0n42itk48fpis06m0r81ip8k.apps.googleusercontent.com";
-    const redirectUri = `${window.location.origin}/auth/callback`;
-    const params = new URLSearchParams({
-      client_id: clientId,
-      redirect_uri: redirectUri,
-      response_type: "code",
-      scope: "email profile",
-    });
-    const url = `https://accounts.google.com/o/oauth2/v2/auth?${params.toString()}`;
-    window.location.href = url;
   };
 
   return (
@@ -164,7 +152,7 @@ export default function Register() {
         <button
           type="button"
           className="btn-primary"
-          onClick={handleGoogleLogin}
+          onClick={startGoogleSignIn}
           style={{ backgroundColor: "#4285F4" }}
         >
           Sign-up with Google

@@ -7,7 +7,7 @@ const { writeJsonToData } = require('../lib/writeJson');
 const router = express.Router();
 
 const GOOGLE_CLIENT_ID = process.env.GOOGLE_CLIENT_ID || "383406826534-8al6042a0n42itk48fpis06m0r81ip8k.apps.googleusercontent.com";
-const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET || "your-google-client-secret-here";
+const GOOGLE_CLIENT_SECRET = process.env.GOOGLE_CLIENT_SECRET?.trim();
 const JWT_SECRET = process.env.JWT_SECRET || "your-jwt-secret-key";
 
 router.post('/google/callback', async (req, res) => {
@@ -17,6 +17,10 @@ router.post('/google/callback', async (req, res) => {
 
     if (!code) {
       return res.status(400).json({ message: 'Authorization code is required' });
+    }
+
+    if (!GOOGLE_CLIENT_SECRET) {
+      return res.status(500).json({ message: 'Google login is not configured on the server.' });
     }
 
     console.log('Google OAuth: Exchanging authorization code for token...');

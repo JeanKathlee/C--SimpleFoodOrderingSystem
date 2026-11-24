@@ -50,6 +50,14 @@ SMTP_SECURE=false
 
 Google OAuth and SMTP are optional for the core local ordering flow. Never commit real credentials.
 
+### Google sign-in
+
+In Google Cloud, use a **Web application** OAuth client and add `http://localhost:5173/auth/callback` to its authorized redirect URIs. Open the app at `http://localhost:5173` so the origin matches.
+
+Set `VITE_GOOGLE_CLIENT_ID` in `FoodJS/frontend/.env.local` to that client's ID. Set the same ID and its secret as `GOOGLE_CLIENT_ID` and `GOOGLE_CLIENT_SECRET` in `FoodJS/backend/.env` for Node, or `Google:ClientId` and `Google:ClientSecret` in [.NET user secrets](FoodJS/backend-csharp/README.md#authentication-and-authorization) for C#. Restart the frontend and your backend.
+
+For the hosted app, register its exact HTTPS URL followed by `/auth/callback` with Google, configure the same OAuth client in the frontend build and backend runtime, and rebuild the frontend. The callback defaults to the app's current origin. If you set `VITE_GOOGLE_REDIRECT_URI`, use the registered callback on that same origin.
+
 `DEMO_MODE` defaults to enabled so portfolio visitors can enter any email and password to explore the customer experience. Set `DEMO_MODE=false` to require registered credentials.
 
 Demo administrator access: `admin@foodjs.demo` / `admin123`.
