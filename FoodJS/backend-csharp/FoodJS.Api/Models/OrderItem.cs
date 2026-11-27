@@ -1,6 +1,6 @@
 namespace FoodJS.Api.Models;
 
-public class OrderItem
+public class OrderItem : ISoftDeletable
 {
     public int Id { get; set; }
 
@@ -21,4 +21,6 @@ public class OrderItem
     public decimal SnapshotPrice { get; set; }
 
     public decimal LineTotal { get; set; }
+
+    public bool IsDeleted { get; set; }
 }

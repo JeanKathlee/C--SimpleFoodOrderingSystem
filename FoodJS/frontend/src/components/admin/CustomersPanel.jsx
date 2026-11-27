@@ -38,7 +38,7 @@ export default function CustomersPanel({
     : [];
   const totalSpent = selectedOrders.reduce((total, order) => total + order.total, 0);
   const customerPager = usePagination(customers, 10);
-  const orderPager = usePagination(selectedOrders, 5, selectedCustomer?.id ?? "");
+  const orderPager = usePagination(selectedOrders, 10, selectedCustomer?.id ?? "");
 
   // Esc closes the profile, like clicking the backdrop
   useEffect(() => {
@@ -125,7 +125,7 @@ export default function CustomersPanel({
             </tbody>
           </table>
         </div>
-        <Pagination pager={customerPager} buttonClass="admin-btn admin-btn-light" label="customers" />
+        <Pagination {...customerPager} label="Customers" />
       </section>
 
       {selectedCustomer && (
@@ -215,7 +215,7 @@ export default function CustomersPanel({
                         ))}
                       </tbody>
                     </table>
-                    <Pagination pager={orderPager} buttonClass="admin-btn admin-btn-light" label="orders" />
+                    <Pagination {...orderPager} label="Customer orders" />
                   </div>
                 )}
               </>

@@ -13,7 +13,7 @@ const EMPTY_COUPON = {
 export default function CouponManagement({ coupons, onAddCoupon, onUpdateCoupon, onDeleteCoupon }) {
   const [form, setForm] = useState(EMPTY_COUPON);
   const [editId, setEditId] = useState(null);
-  const pager = usePagination(coupons, 8);
+  const pager = usePagination(coupons);
 
   const reset = () => {
     setForm(EMPTY_COUPON);
@@ -143,7 +143,7 @@ export default function CouponManagement({ coupons, onAddCoupon, onUpdateCoupon,
           </li>
         ))}
       </ul>
-      <Pagination pager={pager} buttonClass="admin-btn admin-btn-light" label="coupons" />
+      <Pagination {...pager} label="Coupons" />
     </section>
   );
 }

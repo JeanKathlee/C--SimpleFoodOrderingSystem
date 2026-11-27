@@ -3,11 +3,12 @@ using System.Text.RegularExpressions;
 namespace FoodJS.Api.Common;
 
 // Images arrive as a web link (seed menu, Google profile photo) or as an uploaded file
-// sent as a base64 data URL. Uploads must be a real PNG, JPEG, WebP or GIF of at most 2 MB.
+// sent as a base64 data URL. Profile photos allow 2 MB; food images allow 5 MB.
 // SVG is refused because it can carry scripts. Same rules as frontend/src/lib/imageUpload.js
 public static partial class ImageRules
 {
     public const int MaxBytes = 2 * 1024 * 1024;
+    public const int MenuMaxBytes = 5 * 1024 * 1024;
     public const string TypeError = "Image must be a PNG, JPG, WebP or GIF file.";
     public const string SizeError = "Image must be 2 MB or smaller.";
 
@@ -15,7 +16,11 @@ public static partial class ImageRules
     private static partial Regex DataUrl();
 
     // returns an error message, or null when the image is fine (empty means "no image")
-    public static string? Check(string? image)
+    public static string? Check(string? image) => Check(image, MaxBytes);
+
+    public static string? CheckMenuImage(string? image) => Check(image, MenuMaxBytes);
+
+    private static string? Check(string? image, int maxBytes)
     {
         if (string.IsNullOrWhiteSpace(image))
         {
@@ -34,9 +39,10 @@ public static partial class ImageRules
         }
 
         // cheap size check before decoding: 4 base64 characters hold 3 bytes
-        if (match.Groups[2].Length / 4L * 3 > MaxBytes + 3)
+        var sizeError = $"Image must be {maxBytes / (1024 * 1024)} MB or smaller.";
+        if (match.Groups[2].Length / 4L * 3 > maxBytes + 3)
         {
-            return SizeError;
+            return sizeError;
         }
 
         byte[] bytes;
@@ -49,9 +55,9 @@ public static partial class ImageRules
             return TypeError;
         }
 
-        if (bytes.Length > MaxBytes)
+        if (bytes.Length > maxBytes)
         {
-            return SizeError;
+            return sizeError;
         }
 
         // the file's first bytes must match the type it claims, so a renamed file is refused

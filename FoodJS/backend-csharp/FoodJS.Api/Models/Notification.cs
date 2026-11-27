@@ -1,6 +1,6 @@
 namespace FoodJS.Api.Models;
 
-public class Notification
+public class Notification : ISoftDeletable
 {
     public int Id { get; set; }
 
@@ -21,4 +21,6 @@ public class Notification
     public bool IsRead { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+
+    public bool IsDeleted { get; set; }
 }

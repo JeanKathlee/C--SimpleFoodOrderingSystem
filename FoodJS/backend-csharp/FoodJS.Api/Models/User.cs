@@ -1,6 +1,6 @@
 namespace FoodJS.Api.Models;
 
-public class User
+public class User : ISoftDeletable
 {
     public int Id { get; set; }
 
@@ -21,4 +21,6 @@ public class User
     public Role Role { get; set; } = null!;
 
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+
+    public bool IsDeleted { get; set; }
 }

@@ -1,6 +1,9 @@
+using FoodJS.Api.Controllers;
+using FoodJS.Api.Contracts;
+using FoodJS.Api.Services;
 using System.Security.Claims;
 using FoodJS.Api.Data;
-using FoodJS.Api.Features.Cart;
+using FoodJS.Api.Common;
 using FoodJS.Api.Models;
 using Microsoft.AspNetCore.Http;
 using Microsoft.AspNetCore.Mvc;
@@ -105,13 +108,12 @@ public sealed class CartControllerTests : IDisposable
     public async Task Update_and_remove_target_a_cart_line_and_enforce_ownership()
     {
         var owner = ControllerFor(userId: 1);
-        await owner.Add(new AddCartItemRequest("M-1", 1, null), default);
+        await owner.Add(new AddCartItemRequest("M-1", 1, CartOptionPricing.RegularIcedTea), default);
         var item = Assert.Single(await ListFor(owner));
 
         var otherUser = ControllerFor(userId: 2);
-        Assert.IsType<NotFoundObjectResult>(
-            await otherUser.Update(item.Id, new UpdateCartItemRequest(4), default));
-        Assert.IsType<NotFoundObjectResult>(await otherUser.Remove(item.Id, default));
+        Assert.Equal(404, (await Assert.ThrowsAsync<ApiException>(() => otherUser.Update(item.Id, new UpdateCartItemRequest(4), default))).StatusCode);
+        Assert.Equal(404, (await Assert.ThrowsAsync<ApiException>(() => otherUser.Remove(item.Id, default))).StatusCode);
 
         Assert.IsType<OkObjectResult>(
             await owner.Update(item.Id, new UpdateCartItemRequest(4), default));
@@ -126,8 +128,8 @@ public sealed class CartControllerTests : IDisposable
     {
         var firstUser = ControllerFor(userId: 1);
         var secondUser = ControllerFor(userId: 2);
-        await firstUser.Add(new AddCartItemRequest("M-1", 1, null), default);
-        await secondUser.Add(new AddCartItemRequest("M-1", 1, null), default);
+        await firstUser.Add(new AddCartItemRequest("M-1", 1, CartOptionPricing.RegularIcedTea), default);
+        await secondUser.Add(new AddCartItemRequest("M-1", 1, CartOptionPricing.RegularIcedTea), default);
 
         Assert.IsType<OkObjectResult>(await firstUser.Clear(default));
 
@@ -140,18 +142,21 @@ public sealed class CartControllerTests : IDisposable
     {
         var controller = ControllerFor(userId: 1);
 
-        Assert.IsType<BadRequestObjectResult>(await controller.Add(
+        Assert.Equal(400, (await Assert.ThrowsAsync<ApiException>(() => controller.Add(
             new AddCartItemRequest("M-1", 0, null),
-            default));
-        Assert.IsType<BadRequestObjectResult>(await controller.Add(
+            default))).StatusCode);
+        Assert.Equal(400, (await Assert.ThrowsAsync<ApiException>(() => controller.Add(
+            new AddCartItemRequest("M-1", 1, null),
+            default))).StatusCode);
+        Assert.Equal(400, (await Assert.ThrowsAsync<ApiException>(() => controller.Add(
             new AddCartItemRequest("M-1", 1, "Fake option"),
-            default));
-        Assert.IsType<NotFoundObjectResult>(await controller.Add(
-            new AddCartItemRequest("M-2", 1, null),
-            default));
+            default))).StatusCode);
+        Assert.Equal(404, (await Assert.ThrowsAsync<ApiException>(() => controller.Add(
+            new AddCartItemRequest("M-2", 1, CartOptionPricing.RegularIcedTea),
+            default))).StatusCode);
     }
 
-    private CartController ControllerFor(int userId) => new(db)
+    private CartController ControllerFor(int userId) => new(TestServices.Cart(db))
     {
         ControllerContext = new ControllerContext
         {

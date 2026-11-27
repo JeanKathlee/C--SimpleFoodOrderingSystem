@@ -1,10 +1,11 @@
+using FoodJS.Api.Controllers;
+using FoodJS.Api.Contracts;
+using FoodJS.Api.Services;
 using System.Net;
 using System.Net.Http.Json;
 using System.Text.Json;
 using FoodJS.Api.Common;
 using FoodJS.Api.Data;
-using FoodJS.Api.Features.Menu;
-using FoodJS.Api.Features.Orders;
 using FoodJS.Api.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;
@@ -84,6 +85,30 @@ public sealed class AssignedApiFlowTests : IAsyncLifetime
 
         Assert.Equal(HttpStatusCode.OK, (await admin.DeleteAsync($"/api/menu/{created.Id}")).StatusCode);
         Assert.DoesNotContain(await Read<List<MenuItemResponse>>(await anonymous.GetAsync("/api/menu")), item => item.Id == created.Id);
+    }
+
+    [Theory]
+    [InlineData(2 * 1024 * 1024 + 1, true)]
+    [InlineData(5 * 1024 * 1024, true)]
+    [InlineData(5 * 1024 * 1024 + 1, false)]
+    public async Task Menu_create_and_update_enforce_the_five_mebibyte_upload_limit(int size, bool allowed)
+    {
+        var bytes = new byte[size];
+        bytes[0] = 0x89; bytes[1] = 0x50; bytes[2] = 0x4E; bytes[3] = 0x47;
+        var image = $"data:image/png;base64,{Convert.ToBase64String(bytes)}";
+        using var created = await admin.PostAsJsonAsync("/api/menu", MenuRequest(image: image));
+        using var updated = await admin.PutAsJsonAsync($"/api/menu/{PublicId.Menu(menuId)}", MenuRequest(image: image));
+        Assert.Equal(allowed ? HttpStatusCode.Created : HttpStatusCode.BadRequest, created.StatusCode);
+        Assert.Equal(allowed ? HttpStatusCode.OK : HttpStatusCode.BadRequest, updated.StatusCode);
+        if (!allowed)
+        {
+            Assert.Contains("Image must be 5 MB or smaller.", await created.Content.ReadAsStringAsync());
+            Assert.Contains("Image must be 5 MB or smaller.", await updated.Content.ReadAsStringAsync());
+        }
+        using var scope = factory.Services.CreateScope();
+        var db = scope.ServiceProvider.GetRequiredService<FoodJsDbContext>();
+        Assert.Equal(allowed ? image : null, (await db.MenuItems.SingleAsync(i => i.Id == menuId)).Image);
+        Assert.Equal(allowed ? 2 : 1, await db.MenuItems.CountAsync());
     }
 
     [Fact]
@@ -234,14 +259,16 @@ public sealed class AssignedApiFlowTests : IAsyncLifetime
         Assert.Empty(await db.OrderItems.ToListAsync());
         Assert.Empty(await db.Payments.ToListAsync());
         Assert.Empty(await db.OrderStatusHistories.ToListAsync());
-        Assert.Null((await db.Notifications.SingleAsync()).OrderId);
+        Assert.NotNull((await db.Notifications.SingleAsync()).OrderId);
+        Assert.True((await db.Orders.IgnoreQueryFilters().SingleAsync()).IsDeleted);
+        Assert.Single(await db.OrderItems.IgnoreQueryFilters().ToListAsync());
     }
 
     [Fact]
-    public async Task Ordered_menu_items_cannot_be_deleted_and_past_order_lines_are_preserved()
+    public async Task Ordered_menu_items_can_be_hidden_without_losing_past_order_lines()
     {
         var order = await CreateOrder();
-        await Error(await admin.DeleteAsync($"/api/menu/{PublicId.Menu(menuId)}"), HttpStatusCode.Conflict);
+        Assert.Equal(HttpStatusCode.OK, (await admin.DeleteAsync($"/api/menu/{PublicId.Menu(menuId)}")).StatusCode);
         Assert.Single((await Read<OrderResponse>(await customer.GetAsync($"/api/orders/{order.Id}"))).Items);
     }
 
@@ -319,7 +346,7 @@ public sealed class AssignedApiFlowTests : IAsyncLifetime
             await db.SaveChangesAsync();
             sidesId = sides.Id;
         }
-        var result = await Read<MenuPageResponse>(await anonymous.GetAsync(
+        var result = await Read<MenuPageResponse>(await admin.GetAsync(
             $"/api/menu/paged?search=%20vEgAn%20&categoryId={PublicId.Category(sidesId)}&isAvailable=false&pageSize=10"));
         Assert.Equal(1, result.TotalCount);
         Assert.Equal("Salad", Assert.Single(result.Items).Name);

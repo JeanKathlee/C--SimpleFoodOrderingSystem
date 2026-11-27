@@ -1,35 +1,23 @@
+using FoodJS.Api.Services;
 using FoodJS.Api.Common;
 using FoodJS.Api.Data;
-using FoodJS.Api.Development;
-using FoodJS.Api.Features.Auth;
-using FoodJS.Api.Features.Coupons;
-using FoodJS.Api.Features.Menu;
-using FoodJS.Api.Features.Orders;
-using FoodJS.Api.Features.Users;
+using FoodJS.Api.Repositories;
 using Microsoft.AspNetCore.Authentication.JwtBearer;
 using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
-using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.DataProtection;
 
 var builder = WebApplication.CreateBuilder(args);
-var migrationBridge = builder.Configuration.GetValue<bool>("MigrationBridge:Enabled");
-if (migrationBridge && !builder.Environment.IsDevelopment())
-    throw new InvalidOperationException("The migration bridge is restricted to Development.");
 builder.Services.AddAuthentication();
 builder.Services.AddAuthorization();
-builder.Services.AddDataProtection();
-if (migrationBridge)
-{
-    var referenceUrl = new Uri(builder.Configuration["MigrationBridge:ReferenceApiUrl"] ?? "http://localhost:3001/");
-    if (!referenceUrl.IsLoopback || referenceUrl.Scheme != "http" || referenceUrl.AbsolutePath != "/")
-        throw new InvalidOperationException("MigrationBridge:ReferenceApiUrl must be an HTTP loopback origin.");
-    builder.Services.AddHttpClient<MigrationDependencies>(client => { client.BaseAddress = referenceUrl; client.Timeout = TimeSpan.FromSeconds(10); })
-        .ConfigurePrimaryHttpMessageHandler(() => new HttpClientHandler { AllowAutoRedirect = false });
-    builder.Services.AddAuthentication(MigrationAuthenticationHandler.SchemeName)
-        .AddScheme<AuthenticationSchemeOptions, MigrationAuthenticationHandler>(MigrationAuthenticationHandler.SchemeName, _ => { });
-}
-
+var keyRingPath = builder.Configuration["DataProtection:KeyRingPath"];
+var keyRingDirectory = string.IsNullOrWhiteSpace(keyRingPath)
+    ? Path.Combine(builder.Environment.ContentRootPath, ".data-protection-keys")
+    : Path.GetFullPath(keyRingPath, builder.Environment.ContentRootPath);
+builder.Services.AddDataProtection()
+    .SetApplicationName("FoodJS")
+    .PersistKeysToFileSystem(new DirectoryInfo(keyRingDirectory));
 // secret key for login tokens, don't put real secrets in appsettings.json
 builder.Configuration["Jwt:Secret"] ??= builder.Environment.IsDevelopment() || builder.Environment.IsEnvironment("Testing")
     ? "dev-only-jwt-secret-change-me-0123456789"
@@ -81,8 +69,24 @@ builder.Services.AddCors(options =>
 });
 
 // Each feature registers its own service here.
-builder.Services.AddScoped<IMenuService, EfMenuService>(); // menu add, edit, availability, delete
-builder.Services.AddScoped<MenuService>();                  // menu list, search, filter, details
+builder.Services.AddScoped<IMenuService, MenuService>();
+builder.Services.AddScoped<IMenuRepository, MenuRepository>();
+builder.Services.AddScoped<IOrderRepository, OrderRepository>();
+builder.Services.AddScoped<IReferenceDataRepository, ReferenceDataRepository>();
+builder.Services.AddScoped<IUnitOfWorkRepository, UnitOfWorkRepository>();
+builder.Services.AddScoped<IUserRepository, UserRepository>();
+builder.Services.AddScoped<ICartRepository, CartRepository>();
+builder.Services.AddScoped<ICartService, CartService>();
+builder.Services.AddScoped<ICategoryRepository, CategoryRepository>();
+builder.Services.AddScoped<ICategoryService, CategoryService>();
+builder.Services.AddScoped<ICouponRepository, CouponRepository>();
+builder.Services.AddScoped<INotificationRepository, NotificationRepository>();
+builder.Services.AddScoped<INotificationService, NotificationService>();
+builder.Services.AddScoped<IAdminInsightsRepository, AdminInsightsRepository>();
+builder.Services.AddScoped<IAdminInsightsService, AdminInsightsService>();
+builder.Services.AddScoped<HealthService>();
+builder.Services.AddScoped<OrderStatusSeeder>();
+builder.Services.AddScoped<CouponSeeder>();
 builder.Services.AddScoped<IOrderService, OrderService>();
 builder.Services.AddScoped<ICouponService, CouponService>();
 
@@ -92,81 +96,88 @@ builder.Services.AddHttpClient();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<UsersService>();
 builder.Services.AddAuthorization();
-if (!migrationBridge)
-{
-    builder.Services
-        .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
-        .AddJwtBearer(options =>
+builder.Services
+    .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
+    .AddJwtBearer(options =>
+    {
+        options.MapInboundClaims = false;
+        options.TokenValidationParameters = new()
         {
-            options.MapInboundClaims = false;
-            options.TokenValidationParameters = new()
+            ValidateIssuer = false,
+            ValidateAudience = false,
+            IssuerSigningKey = AuthService.SigningKey(builder.Configuration),
+            NameClaimType = "email",
+            RoleClaimType = "role",
+        };
+        // same error messages as the old node api
+        options.Events = new()
+        {
+            OnTokenValidated = async context =>
             {
-                ValidateIssuer = false,
-                ValidateAudience = false,
-                IssuerSigningKey = AuthService.SigningKey(builder.Configuration),
-                NameClaimType = "email",
-                RoleClaimType = "role",
-            };
-            // same error messages as the old node api
-            options.Events = new()
+                var subject = context.Principal?.FindFirst("sub")?.Value;
+                var role = context.Principal?.FindFirst("role")?.Value;
+                if (!int.TryParse(subject, out var userId) ||
+                    !await context.HttpContext.RequestServices.GetRequiredService<AuthService>()
+                        .IsTokenAccountActiveAsync(userId, role))
+                    context.Fail("This account is unavailable.");
+            },
+            OnChallenge = context =>
             {
-                OnChallenge = context =>
+                context.HandleResponse();
+                context.Response.StatusCode = StatusCodes.Status401Unauthorized;
+                return context.Response.WriteAsJsonAsync(new
                 {
-                    context.HandleResponse();
-                    context.Response.StatusCode = StatusCodes.Status401Unauthorized;
-                    return context.Response.WriteAsJsonAsync(new
-                    {
-                        message = context.AuthenticateFailure is null
-                            ? "Unauthorized. Token required."
-                            : "Unauthorized. Invalid token."
-                    });
-                },
-                OnForbidden = context =>
-                {
-                    context.Response.StatusCode = StatusCodes.Status403Forbidden;
-                    return context.Response.WriteAsJsonAsync(new { message = "Forbidden. Admin access required." });
-                },
-            };
-        });
-}
+                    message = context.AuthenticateFailure is null
+                        ? "Unauthorized. Token required."
+                        : "Unauthorized. Invalid token."
+                });
+            },
+            OnForbidden = context =>
+            {
+                context.Response.StatusCode = StatusCodes.Status403Forbidden;
+                return context.Response.WriteAsJsonAsync(new { message = "Forbidden. Admin access required." });
+            },
+        };
+    });
 
 var app = builder.Build();
 
 // Apply migrations and make sure the order status lookup rows exist.
 using (var scope = app.Services.CreateScope())
 {
-    var db = scope.ServiceProvider.GetRequiredService<FoodJsDbContext>();
-    await db.Database.MigrateAsync();
-    await OrderStatusSeeder.EnsureSeededAsync(db);
+    var unit = scope.ServiceProvider.GetRequiredService<IUnitOfWorkRepository>();
+    var auth = scope.ServiceProvider.GetRequiredService<AuthService>();
+    await unit.MigrateAsync();
+    await scope.ServiceProvider.GetRequiredService<OrderStatusSeeder>().EnsureSeededAsync();
+    await auth.EnsureRolesAsync();
     // demo accounts and the old node menu, only on your own machine
-    if (app.Environment.IsDevelopment() && !migrationBridge)
+    if (app.Environment.IsDevelopment())
     {
-        await AuthService.SeedDevelopmentDataAsync(db);
-        await MenuService.SeedDevelopmentDataAsync(db, app.Environment.ContentRootPath);
+        await auth.SeedDevelopmentDataAsync();
+        await scope.ServiceProvider.GetRequiredService<IMenuService>().SeedDevelopmentDataAsync(app.Environment.ContentRootPath);
+        await scope.ServiceProvider.GetRequiredService<CouponSeeder>().EnsureDevelopmentCouponsAsync();
     }
 
-    if (migrationBridge)
-        await scope.ServiceProvider.GetRequiredService<MigrationDependencies>().InitializeAsync();
+    if (!app.Environment.IsDevelopment())
+    {
+        await auth.SeedConfiguredAdminAsync(
+            builder.Configuration["BootstrapAdmin:Email"],
+            builder.Configuration["BootstrapAdmin:Password"]);
+    }
+
 }
 
 app.UseExceptionHandler();
 app.UseCors("Frontend");
+app.UseDefaultFiles();
+app.UseStaticFiles();
 app.UseAuthentication();
 app.UseAuthorization();
-if (migrationBridge)
-{
-    app.Use(async (context, next) =>
-    {
-        if (context.Request.Method == "POST" && (context.Request.Path == "/api/orders" || context.Request.Path == "/api/orders/quote") && context.User.Identity?.IsAuthenticated == true)
-            await context.RequestServices.GetRequiredService<MigrationDependencies>().RefreshCouponsAsync(context.RequestAborted);
-        await next(context);
-    });
-    app.MapGet("/api/menu/dependencies/categories", async (MigrationDependencies dependencies, CancellationToken ct) =>
-        Results.Ok(await dependencies.CategoriesAsync(ct)));
-    app.Logger.LogWarning("Local migration bridge enabled: Menu/Orders use SQLite; identity and dependencies come from local Express. Do not deploy this profile.");
-}
-
 app.MapControllers();
+if (!app.Environment.IsDevelopment())
+{
+    app.MapFallbackToFile("index.html");
+}
 
 app.Run();
 

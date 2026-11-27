@@ -1,6 +1,6 @@
 namespace FoodJS.Api.Models;
 
-public class ShoppingCart
+public class ShoppingCart : ISoftDeletable
 {
     public int Id { get; set; }
 
@@ -11,4 +11,6 @@ public class ShoppingCart
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 
     public DateTimeOffset UpdatedAt { get; set; } = DateTimeOffset.UtcNow;
+
+    public bool IsDeleted { get; set; }
 }

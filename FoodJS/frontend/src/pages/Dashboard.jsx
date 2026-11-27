@@ -424,7 +424,7 @@ export default function Dashboard() {
     setModalConfig({
       open: true,
       title: "Delete menu item",
-      message: `Delete “${item.name}”? This permanently removes it from the menu. Items used in existing orders must be marked unavailable instead.`,
+      message: `Hide “${item.name}” from the menu? Its saved record and previous order details will be retained.`,
       confirmLabel: "Delete Item",
       onConfirm: async () => {
         try {
@@ -480,16 +480,16 @@ export default function Dashboard() {
 
       if (!response.ok) {
         const error = await response.json();
-        errorNotif(error?.message || "Failed to add category");
-        return;
+        return { ok: false, message: error?.message || "Failed to add category. Please retry." };
       }
 
       const newCategory = await response.json();
       setCategories((current) => [newCategory, ...current]);
       success("Category added successfully!");
       bumpSyncState("categories");
-    } catch (err) {
-      errorNotif("Error adding category");
+      return { ok: true };
+    } catch (_err) {
+      return { ok: false, message: "Could not connect to add the category. Please retry." };
     }
   };
 
@@ -507,8 +507,7 @@ export default function Dashboard() {
 
       if (!response.ok) {
         const error = await response.json();
-        errorNotif(error?.message || "Failed to update category");
-        return;
+        return { ok: false, message: error?.message || "Failed to update category. Please retry." };
       }
 
       const updatedCategory = await response.json();
@@ -517,8 +516,9 @@ export default function Dashboard() {
       );
       success("Category updated successfully!");
       bumpSyncState("categories");
-    } catch (err) {
-      errorNotif("Error updating category");
+      return { ok: true };
+    } catch (_err) {
+      return { ok: false, message: "Could not connect to update the category. Please retry." };
     }
   };
 
@@ -646,7 +646,7 @@ export default function Dashboard() {
     setModalConfig({
       open: true,
       title: "Delete coupon",
-      message: "This coupon will be permanently deleted.",
+      message: "Hide this coupon? Its saved record will be retained.",
       confirmLabel: "Delete Coupon",
       onConfirm: async () => {
         try {

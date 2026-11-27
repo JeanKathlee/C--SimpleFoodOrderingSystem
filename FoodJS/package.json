@@ -4,15 +4,15 @@
   "version": "1.0.0",
   "scripts": {
     "dev:frontend": "npm run dev --prefix frontend",
-    "dev:backend": "npm run dev --prefix backend",
-    "dev:backend:csharp": "dotnet watch --project backend-csharp/FoodJS.Api/FoodJS.Api.csproj --launch-profile migration",
-    "start": "npm start --prefix backend",
+    "dev:backend": "dotnet watch --project backend-csharp/FoodJS.Api/FoodJS.Api.csproj --launch-profile http",
+    "dev:backend:csharp": "npm run dev:backend",
+    "start": "dotnet run --project backend-csharp/FoodJS.Api/FoodJS.Api.csproj --launch-profile http",
     "build": "npm run build:frontend",
     "build:frontend": "npm run build --prefix frontend",
-    "build:backend:csharp": "dotnet build backend-csharp/FoodJS.Backend.slnx",
+    "build:backend:csharp": "dotnet build backend-csharp/FoodJS.Backend.slnx -c Release",
     "preview:frontend": "npm run preview --prefix frontend",
     "install:frontend": "npm install --prefix frontend",
-    "install:backend": "npm install --prefix backend",
+    "install:backend": "dotnet restore backend-csharp/FoodJS.Api/FoodJS.Api.csproj",
     "install:all": "npm run install:frontend && npm run install:backend"
   }
 }

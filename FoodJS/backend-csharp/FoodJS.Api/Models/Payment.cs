@@ -1,6 +1,6 @@
 namespace FoodJS.Api.Models;
 
-public class Payment
+public class Payment : ISoftDeletable
 {
     public int Id { get; set; }
 
@@ -17,4 +17,6 @@ public class Payment
     public DateTimeOffset? PaidAt { get; set; }
 
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+
+    public bool IsDeleted { get; set; }
 }

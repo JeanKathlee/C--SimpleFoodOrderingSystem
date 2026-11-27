@@ -2,10 +2,10 @@ import { useEffect, useRef, useState } from "react";
 import Pagination from "../Pagination";
 import ConfirmModal from "./ConfirmModal";
 import { formatPrice } from "../../lib/menuApi";
+import { checkImageFile, FOOD_IMAGE_MAX_BYTES } from "../../lib/imageUpload";
 
 const EMPTY_FORM = { name: "", description: "", categoryId: "", price: "", prepTime: "", isAvailable: true, image: null };
 const EMPTY_PAGE = { items: [], totalCount: 0, page: 1, pageSize: 10, totalPages: 1 };
-const MAX_IMAGE_SIZE = 2 * 1024 * 1024;
 
 export default function MenuManagement({ categories, categoryLoading, categoryError, onRetryCategories,
   revision, onAddMenuItem, onUpdateMenuItem, onDeleteMenuItem, onSetAvailability, onDraftChange }) {
@@ -105,7 +105,8 @@ export default function MenuManagement({ categories, categoryLoading, categoryEr
     if (!file) return;
     const fail = message => { setErrors(current => ({ ...current, image: message })); event.target.value = ""; };
     if (!["image/jpeg", "image/png", "image/webp"].includes(file.type)) return fail("Choose a JPG, PNG, or WebP image.");
-    if (file.size > MAX_IMAGE_SIZE) return fail("The image must be 2 MB or smaller.");
+    const imageError = checkImageFile(file, FOOD_IMAGE_MAX_BYTES);
+    if (imageError) return fail(imageError);
     const id = ++imageReadId.current;
     setReadingImage(true);
     const reader = new FileReader();
@@ -187,7 +188,7 @@ export default function MenuManagement({ categories, categoryLoading, categoryEr
           <div className="menu-field menu-field-wide"><label htmlFor="menu-image">Item image <span>(optional)</span></label>
             <div className="menu-image-control">{form.image && <img className="menu-image-preview" src={form.image} alt={`Preview of ${form.name || "menu item"}`} />}
               <div><input {...fieldProps("image")} ref={fileRef} type="file" accept="image/jpeg,image/png,image/webp" onChange={readImage} />
-                <p className="menu-hint">JPG, PNG, or WebP · Up to 2 MB{readingImage ? " · Reading image…" : ""}</p>
+                <p className="menu-hint">JPG, PNG, or WebP · Up to 5 MB{readingImage ? " · Reading image…" : ""}</p>
                 {form.image && <button type="button" className="menu-text-button" onClick={() => { update("image", null); setImageChanged(true); if (fileRef.current) fileRef.current.value = ""; }}>Remove image</button>}
               </div></div>{errorFor("image")}</div>
           <label className="menu-checkbox menu-field-wide"><input type="checkbox" checked={form.isAvailable} onChange={e => update("isAvailable", e.target.checked)} />Available for ordering</label>

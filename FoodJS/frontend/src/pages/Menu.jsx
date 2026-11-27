@@ -10,6 +10,8 @@ import {
   formatPrice,
 } from "../data/menuItems";
 import { useNotification } from "../hooks/useNotification";
+import Pagination from "../components/Pagination";
+import usePagination from "../hooks/usePagination";
 
 export default function Menu() {
   const navigate = useNavigate();
@@ -22,6 +24,7 @@ export default function Menu() {
   const [loading, setLoading] = useState(true);
   const [showBag, setShowBag] = useState(false);
   const [showAccountMenu, setShowAccountMenu] = useState(false);
+  const bagPager = usePagination(cartItems);
 
   // Load sa menu and cart
   useEffect(() => {
@@ -58,6 +61,7 @@ export default function Menu() {
 
   // search and category filter are done by the C# backend (/api/menu?search=&category=)
   const [visibleItems, setVisibleItems] = useState([]);
+  const menuPager = usePagination(visibleItems, 10, JSON.stringify([activeTab, query]));
   useEffect(() => {
     let stale = false;
     fetchMenuFromBackend({ search: query, category: activeTab }).then((items) => {
@@ -83,9 +87,9 @@ export default function Menu() {
     navigate(`/product/${item.id}`);
   };
 
-  const adjustQuantity = async (menuItemId, newQuantity) => {
+  const adjustQuantity = async (cartItemId, newQuantity) => {
     if (newQuantity <= 0) {
-      await removeFromCart(menuItemId);
+      await removeFromCart(cartItemId);
       return;
     }
 
@@ -98,7 +102,7 @@ export default function Menu() {
         return;
       }
 
-      const response = await fetch(`/api/cart/items/${menuItemId}`, {
+      const response = await fetch(`/api/cart/items/${cartItemId}`, {
         method: "PATCH",
         headers: {
           "Content-Type": "application/json",
@@ -108,7 +112,7 @@ export default function Menu() {
       });
 
       if (!response.ok) {
-        const error = await response.json();
+        const error = await response.json().catch(() => null);
         console.error("Failed to update cart:", response.status, error);
         errorNotif(error?.message || "Failed to update cart item");
         return;
@@ -116,7 +120,7 @@ export default function Menu() {
 
       setCartItems((prev) =>
         prev.map((item) =>
-          item.menuItemId === menuItemId
+          (item.id ?? item.menuItemId) === cartItemId
             ? { ...item, quantity: newQuantity }
             : item
         )
@@ -128,7 +132,7 @@ export default function Menu() {
     }
   };
 
-  const removeFromCart = async (menuItemId) => {
+  const removeFromCart = async (cartItemId) => {
     try {
       const session = getAuthSession();
       const token = session?.token;
@@ -138,7 +142,7 @@ export default function Menu() {
         return;
       }
 
-      const response = await fetch(`/api/cart/items/${menuItemId}`, {
+      const response = await fetch(`/api/cart/items/${cartItemId}`, {
         method: "DELETE",
         headers: {
           Authorization: `Bearer ${token}`,
@@ -146,14 +150,14 @@ export default function Menu() {
       });
 
       if (!response.ok) {
-        const error = await response.json();
+        const error = await response.json().catch(() => null);
         console.error("Failed to remove from cart:", response.status, error);
         errorNotif(error?.message || "Failed to remove from cart");
         return;
       }
 
       setCartItems((prev) =>
-        prev.filter((item) => item.menuItemId !== menuItemId)
+        prev.filter((item) => (item.id ?? item.menuItemId) !== cartItemId)
       );
       success("Item removed from cart");
     } catch (err) {
@@ -180,7 +184,7 @@ export default function Menu() {
       });
 
       if (!response.ok) {
-        const error = await response.json();
+        const error = await response.json().catch(() => null);
         console.error("Failed to clear cart:", response.status, error);
         errorNotif(error?.message || "Failed to clear cart");
         return;
@@ -323,7 +327,7 @@ export default function Menu() {
               ) : (
                 <>
                   <div className="menu-bag-list">
-                    {cartItems.map((item) => (
+                    {bagPager.pageItems.map((item) => (
                       <div key={cartItemKey(item)} className="menu-bag-item">
                         <div>
                           <h3>{item.name}</h3>
@@ -331,14 +335,14 @@ export default function Menu() {
                           <p>{formatPrice(item.price * item.quantity)}</p>
                         </div>
                         <div className="menu-bag-actions">
-                          <button type="button" aria-label={`Decrease ${item.name} quantity`} onClick={() => adjustQuantity(item.menuItemId, item.quantity - 1)}>
+                          <button type="button" aria-label={`Decrease ${item.name} quantity`} onClick={() => adjustQuantity(item.id ?? item.menuItemId, item.quantity - 1)}>
                             −
                           </button>
                           <span>{item.quantity}</span>
-                          <button type="button" aria-label={`Increase ${item.name} quantity`} onClick={() => adjustQuantity(item.menuItemId, item.quantity + 1)}>
+                          <button type="button" aria-label={`Increase ${item.name} quantity`} onClick={() => adjustQuantity(item.id ?? item.menuItemId, item.quantity + 1)}>
                             +
                           </button>
-                          <button type="button" className="remove" onClick={() => removeFromCart(item.menuItemId)}>
+                          <button type="button" className="remove" onClick={() => removeFromCart(item.id ?? item.menuItemId)}>
                             Remove
                           </button>
                         </div>
@@ -346,6 +350,7 @@ export default function Menu() {
                     ))}
                   </div>
 
+                  <Pagination {...bagPager} label="Bag lines" />
                   <div className="menu-bag-total">
                     <div>
                       <span>Subtotal</span>
@@ -395,7 +400,7 @@ export default function Menu() {
         ) : (
           <section className="menu-layout">
             <div className="menu-grid">
-              {visibleItems.map((item) => (
+              {menuPager.pageItems.map((item) => (
                 <article key={item.name} className="menu-card">
                   <button
                     type="button"
@@ -436,7 +441,7 @@ export default function Menu() {
                 </div>
               )}
             </div>
-
+            <Pagination {...menuPager} label="Menu items" />
           </section>
         )}
 

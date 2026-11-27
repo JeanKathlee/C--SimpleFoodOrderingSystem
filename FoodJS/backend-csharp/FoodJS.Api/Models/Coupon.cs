@@ -1,6 +1,6 @@
 namespace FoodJS.Api.Models;
 
-public class Coupon
+public class Coupon : ISoftDeletable
 {
     public int Id { get; set; }
 
@@ -23,4 +23,6 @@ public class Coupon
     public bool IsActive { get; set; } = true;
 
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
+
+    public bool IsDeleted { get; set; }
 }

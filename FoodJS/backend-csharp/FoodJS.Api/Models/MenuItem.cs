@@ -1,6 +1,6 @@
 namespace FoodJS.Api.Models;
 
-public class MenuItem
+public class MenuItem : ISoftDeletable
 {
     public int Id { get; set; }
 
@@ -13,6 +13,8 @@ public class MenuItem
     public int PrepTime { get; set; }
 
     public bool IsAvailable { get; set; } = true;
+
+    public bool IsDeleted { get; set; }
 
     public int SoldCount { get; set; }
 

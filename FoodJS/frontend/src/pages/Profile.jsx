@@ -4,6 +4,8 @@ import DeliveryMapPicker from "../components/DeliveryMapPicker";
 import { getAuthSession, saveAuthSession } from "../lib/auth";
 import { useNotification } from "../hooks/useNotification";
 import { IMAGE_ACCEPT, checkImageFile } from "../lib/imageUpload";
+import Pagination from "../components/Pagination";
+import usePagination from "../hooks/usePagination";
 
 const emptyProfile = {
   firstName: "",
@@ -22,6 +24,7 @@ export default function Profile() {
   const [loading, setLoading] = useState(true);
   const [saving, setSaving] = useState(false);
   const [previewImage, setPreviewImage] = useState("");
+  const addressPager = usePagination(savedAddresses);
 
   const initials = useMemo(() => {
     const first = profile.firstName?.trim()?.[0] || "";
@@ -294,11 +297,12 @@ export default function Profile() {
               <p className="muted-text">No extra addresses yet.</p>
             ) : (
               <ul className="profile-address-list">
-                {savedAddresses.map((entry, index) => (
+                {addressPager.pageItems.map((entry, index) => (
                   <li key={`${entry}-${index}`}>{entry}</li>
                 ))}
               </ul>
             )}
+            {!!savedAddresses.length && <Pagination {...addressPager} label="Addresses" />}
           </aside>
         </div>
       </div>

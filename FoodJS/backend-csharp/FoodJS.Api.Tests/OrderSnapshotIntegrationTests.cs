@@ -1,6 +1,8 @@
+using FoodJS.Api.Controllers;
+using FoodJS.Api.Contracts;
+using FoodJS.Api.Services;
 using FoodJS.Api.Common;
 using FoodJS.Api.Data;
-using FoodJS.Api.Features.Orders;
 using FoodJS.Api.Models;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -23,7 +25,7 @@ public sealed class OrderSnapshotIntegrationTests : IAsyncLifetime
         db = new FoodJsDbContext(new DbContextOptionsBuilder<FoodJsDbContext>()
             .UseSqlite(connection).Options);
         await db.Database.MigrateAsync();
-        await OrderStatusSeeder.EnsureSeededAsync(db);
+        await TestServices.Statuses(db).EnsureSeededAsync();
 
         var user = new User
         {
@@ -55,7 +57,7 @@ public sealed class OrderSnapshotIntegrationTests : IAsyncLifetime
     [Fact]
     public async Task Submitted_details_survive_profile_edits_and_coupon_rename_or_deletion()
     {
-        var service = new OrderService(db);
+        var service = TestServices.Orders(db);
         var created = await service.CreateAsync(userId, Request("  Delivery Recipient  ", "  09990000000  ", " SAVE10 "));
         AssertDetails(created, "Delivery Recipient", "09990000000", "SAVE10");
         Assert.Equal(90m, created.Total);
@@ -91,7 +93,7 @@ public sealed class OrderSnapshotIntegrationTests : IAsyncLifetime
     [Fact]
     public async Task Each_order_keeps_its_own_contact_details_and_coupon()
     {
-        var service = new OrderService(db);
+        var service = TestServices.Orders(db);
         var first = await service.CreateAsync(userId, Request("First Recipient", "09111111111", "SAVE10"));
         var second = await service.CreateAsync(userId, Request("Second Recipient", "09222222222"));
         db.ChangeTracker.Clear();
@@ -105,7 +107,7 @@ public sealed class OrderSnapshotIntegrationTests : IAsyncLifetime
     [InlineData("   ")]
     public async Task Missing_optional_contact_and_coupon_do_not_fall_back_to_live_profile(string? empty)
     {
-        var service = new OrderService(db);
+        var service = TestServices.Orders(db);
         var created = await service.CreateAsync(userId, Request("Recipient", empty, empty));
         db.ChangeTracker.Clear();
         AssertDetails((await service.GetForUserAsync(userId, created.Id))!, "Recipient", string.Empty, null);
@@ -120,7 +122,7 @@ public sealed class OrderSnapshotIntegrationTests : IAsyncLifetime
         var user = await db.Users.SingleAsync();
         user.MobileNumber = legacyMobile;
         await db.SaveChangesAsync();
-        var service = new OrderService(db);
+        var service = TestServices.Orders(db);
         var created = await service.CreateAsync(userId, Request("Old Recipient", legacyMobile, "SAVE10"));
 
         // Dropping the snapshot columns recreates the previous schema: original checkout details are unavailable.
@@ -145,7 +147,7 @@ public sealed class OrderSnapshotIntegrationTests : IAsyncLifetime
     public async Task Invalid_coupon_is_not_saved_as_an_applied_coupon()
     {
         var error = await Assert.ThrowsAsync<ApiException>(() =>
-            new OrderService(db).CreateAsync(userId, Request("Recipient", "09111111111", "BADCODE")));
+            TestServices.Orders(db).CreateAsync(userId, Request("Recipient", "09111111111", "BADCODE")));
         Assert.Equal(400, error.StatusCode);
         Assert.Empty(await db.Orders.ToListAsync());
         Assert.Equal(0, (await db.Coupons.SingleAsync()).UsedCount);

@@ -3,11 +3,14 @@ import { useNavigate } from "react-router-dom";
 import { formatPrice } from "../data/menuItems";
 import { getAuthSession } from "../lib/auth";
 import { cartItemKey } from "../lib/cartItems";
+import Pagination from "../components/Pagination";
+import usePagination from "../hooks/usePagination";
 
 export default function Cart() {
   const navigate = useNavigate();
   const [cartItems, setCartItems] = useState([]);
   const [loading, setLoading] = useState(true);
+  const pager = usePagination(cartItems);
 
   useEffect(() => {
     const loadCart = async () => {
@@ -149,7 +152,7 @@ export default function Cart() {
         ) : (
           <div className="cart-layout">
             <section className="panel-card cart-list">
-              {cartItems.map((item) => (
+              {pager.pageItems.map((item) => (
                 <div key={cartItemKey(item)} className="cart-item">
                   <div className="cart-item-info">
                     <h3>{item.name}</h3>
@@ -180,6 +183,7 @@ export default function Cart() {
                   </div>
                 </div>
               ))}
+              <Pagination {...pager} label="Cart lines" />
             </section>
 
             <aside className="panel-card cart-summary">

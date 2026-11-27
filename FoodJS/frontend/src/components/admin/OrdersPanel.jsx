@@ -197,7 +197,7 @@ export default function OrdersPanel({
           </tbody>
         </table>
       </div>
-      <Pagination pager={pager} buttonClass="admin-btn admin-btn-light" label="orders" />
+      <Pagination {...pager} label="Orders" />
     </section>
   );
 }

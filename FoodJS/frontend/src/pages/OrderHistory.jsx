@@ -3,6 +3,7 @@ import { Link } from "react-router-dom";
 import useOrderPage from "../hooks/useOrderPage";
 import OrderFilters from "../components/OrderFilters";
 import Pagination from "../components/Pagination";
+import usePagination from "../hooks/usePagination";
 import { orderDate, orderMoney, orderRequest } from "../lib/orders";
 import "../orders.css";
 
@@ -12,6 +13,7 @@ export default function OrderHistory() {
   const [notifications, setNotifications] = useState([]);
   const [noticesLoading, setNoticesLoading] = useState(true);
   const [noticesError, setNoticesError] = useState("");
+  const noticePager = usePagination(notifications);
   useEffect(() => {
     const controller = new AbortController(); const signal = controller.signal;
     orderRequest("/api/notifications", { signal }).then(body => { if (!signal.aborted) setNotifications(Array.isArray(body) ? body : []); })
@@ -25,7 +27,7 @@ export default function OrderHistory() {
     <div className="history-layout">
       <section className="panel-card filter-card"><h2>Search orders</h2><OrderFilters filters={filters} onChange={page.setFilter} onClear={page.clearFilters} /></section>
       <aside className="panel-card history-notifications"><h3>Recent status notifications</h3>
-        {noticesLoading ? <p>Loading notifications…</p> : noticesError ? <p role="status">{noticesError}</p> : !notifications.length ? <p>No status updates yet.</p> : <div className="notification-list">{notifications.slice(0, 5).map(notice => <div key={notice.id} className={`notification-item ${notice.read ? "" : "unread"}`}><div><strong>{notice.title}</strong><p>{notice.message}</p></div><span>{orderDate(notice.createdAt)}</span></div>)}</div>}
+        {noticesLoading ? <p>Loading notifications…</p> : noticesError ? <p role="status">{noticesError}</p> : !notifications.length ? <p>No status updates yet.</p> : <><div className="notification-list">{noticePager.pageItems.map(notice => <div key={notice.id} className={`notification-item ${notice.read ? "" : "unread"}`}><div><strong>{notice.title}</strong><p>{notice.message}</p></div><span>{orderDate(notice.createdAt)}</span></div>)}</div><Pagination {...noticePager} label="Notifications" /></>}
       </aside>
     </div>
     {error && <div className="order-notice" role="alert"><p>{error}{page.hasLoaded ? " Previously loaded orders remain visible." : ""}</p><button type="button" onClick={page.refresh} disabled={loading}>Retry orders</button></div>}

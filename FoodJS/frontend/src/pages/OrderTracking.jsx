@@ -3,6 +3,8 @@ import { Link, useParams } from "react-router-dom";
 import { orderDate, orderRequest } from "../lib/orders";
 import OrderDetailsContent from "../components/OrderDetailsContent";
 import ConfirmModal from "../components/admin/ConfirmModal";
+import Pagination from "../components/Pagination";
+import usePagination from "../hooks/usePagination";
 import "../orders.css";
 
 export default function OrderTracking() {
@@ -12,6 +14,7 @@ export default function OrderTracking() {
   const [error, setError] = useState("");
   const [revision, setRevision] = useState(0);
   const [orderNotifications, setOrderNotifications] = useState([]);
+  const noticePager = usePagination(orderNotifications, 10, orderId);
   const [noticesError, setNoticesError] = useState("");
   const [noticesLoading, setNoticesLoading] = useState(true);
   const [markingRead, setMarkingRead] = useState(false);
@@ -89,7 +92,7 @@ export default function OrderTracking() {
       {canCancel && <button type="button" className="client-btn danger" disabled={cancelling || loading || !!error} onClick={() => setCancelConfirmOpen(true)}>Cancel order</button>}
     </section><aside className="panel-card tracking-sidebar"><div className="tracking-sidebar-header"><h3>Recent status notifications</h3><button type="button" className="client-btn ghost" disabled={!unread.length || markingRead} onClick={markRead}>{markingRead ? "Updating…" : "Mark all read"}</button></div>
       {noticesError && <p role="status">{noticesError}</p>}
-      {noticesLoading ? <p>Loading notifications…</p> : !orderNotifications.length && !noticesError ? <p>No status notifications yet.</p> : <div className="notification-list">{orderNotifications.slice(0, 5).map(item => <div key={item.id} className={`notification-item ${item.read ? "" : "unread"}`}><div><strong>{item.title}</strong><p>{item.message}</p></div><span>{orderDate(item.createdAt)}</span></div>)}</div>}
+      {noticesLoading ? <p>Loading notifications…</p> : !orderNotifications.length && !noticesError ? <p>No status notifications yet.</p> : <><div className="notification-list">{noticePager.pageItems.map(item => <div key={item.id} className={`notification-item ${item.read ? "" : "unread"}`}><div><strong>{item.title}</strong><p>{item.message}</p></div><span>{orderDate(item.createdAt)}</span></div>)}</div>{!!orderNotifications.length && <Pagination {...noticePager} label="Notifications" />}</>}
       <div className="tracking-actions"><Link className="client-btn ghost" to="/order-history">View all orders</Link></div>
     </aside></div>}
     <ConfirmModal open={cancelConfirmOpen} title="Cancel this order?" message={`Order ${orderId} will be marked as Cancelled. This cannot be undone.`} cancelLabel="Keep order" confirmLabel="Yes, cancel order" onCancel={() => setCancelConfirmOpen(false)} onConfirm={confirmCancel} />

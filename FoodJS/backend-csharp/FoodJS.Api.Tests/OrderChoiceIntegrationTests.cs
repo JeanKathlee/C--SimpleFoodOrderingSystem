@@ -1,7 +1,9 @@
+using FoodJS.Api.Controllers;
+using FoodJS.Api.Contracts;
+using FoodJS.Api.Services;
 using System.Text.Json;
 using FoodJS.Api.Common;
 using FoodJS.Api.Data;
-using FoodJS.Api.Features.Orders;
 using FoodJS.Api.Models;
 using Microsoft.Data.Sqlite;
 using Microsoft.EntityFrameworkCore;
@@ -24,7 +26,7 @@ public sealed class OrderChoiceIntegrationTests : IAsyncLifetime
         db = new FoodJsDbContext(new DbContextOptionsBuilder<FoodJsDbContext>()
             .UseSqlite(connection).Options);
         await db.Database.MigrateAsync();
-        await OrderStatusSeeder.EnsureSeededAsync(db);
+        await TestServices.Statuses(db).EnsureSeededAsync();
 
         var role = new Role { Name = "customer" };
         var user = new User
@@ -59,7 +61,7 @@ public sealed class OrderChoiceIntegrationTests : IAsyncLifetime
                "price":0.01,"addOn":0,"name":"Tampered name"}]}
             """;
         var request = JsonSerializer.Deserialize<CreateOrderRequest>(json, new JsonSerializerOptions(JsonSerializerDefaults.Web))!;
-        var service = new OrderService(db);
+        var service = TestServices.Orders(db);
         var created = await service.CreateAsync(userId, request);
 
         Assert.Equal(300m, created.Subtotal);
@@ -83,7 +85,7 @@ public sealed class OrderChoiceIntegrationTests : IAsyncLifetime
     [Fact]
     public async Task Different_choices_remain_separate_and_matching_choices_merge()
     {
-        var result = await new OrderService(db).CreateAsync(userId, Request(
+        var result = await TestServices.Orders(db).CreateAsync(userId, Request(
             Line("Go Regular Iced Tea"), Line("Go Large Iced Tea"),
             Line(" Go Large Iced Tea ", 2), Line("Go Medium Iced Tea")));
 
@@ -103,7 +105,7 @@ public sealed class OrderChoiceIntegrationTests : IAsyncLifetime
             ExpiryDate = DateOnly.FromDateTime(DateTime.UtcNow).AddDays(1)
         });
         await db.SaveChangesAsync();
-        var result = await new OrderService(db).CreateAsync(userId, new CreateOrderRequest
+        var result = await TestServices.Orders(db).CreateAsync(userId, new CreateOrderRequest
         {
             CustomerName = "Test Customer", CouponCode = "SAVE10",
             Items = [Line("Go Medium Iced Tea", 2)]
@@ -119,7 +121,7 @@ public sealed class OrderChoiceIntegrationTests : IAsyncLifetime
     [InlineData("Go Regular Iced Tea")]
     public async Task No_upgrade_keeps_the_base_price(string? choice)
     {
-        var result = await new OrderService(db).CreateAsync(userId, Request(Line(choice, 2)));
+        var result = await TestServices.Orders(db).CreateAsync(userId, Request(Line(choice, 2)));
         Assert.Equal(200m, result.Total);
         Assert.Equal(100m, Assert.Single(result.Items).Price);
     }
@@ -130,7 +132,7 @@ public sealed class OrderChoiceIntegrationTests : IAsyncLifetime
     public async Task Unknown_choices_are_rejected_without_saving_an_order(string choice)
     {
         var exception = await Assert.ThrowsAsync<ApiException>(() =>
-            new OrderService(db).CreateAsync(userId, Request(Line(choice))));
+            TestServices.Orders(db).CreateAsync(userId, Request(Line(choice))));
         Assert.Equal(400, exception.StatusCode);
         Assert.Empty(await db.Orders.ToListAsync());
         Assert.Empty(await db.Payments.ToListAsync());
@@ -139,7 +141,7 @@ public sealed class OrderChoiceIntegrationTests : IAsyncLifetime
     [Fact]
     public async Task Quantity_overflow_is_rejected_before_saving()
     {
-        var exception = await Assert.ThrowsAsync<ApiException>(() => new OrderService(db).CreateAsync(
+        var exception = await Assert.ThrowsAsync<ApiException>(() => TestServices.Orders(db).CreateAsync(
             userId, Request(Line("Go Large Iced Tea", int.MaxValue), Line("Go Large Iced Tea"))));
         Assert.Equal(400, exception.StatusCode);
         Assert.Empty(await db.Orders.ToListAsync());

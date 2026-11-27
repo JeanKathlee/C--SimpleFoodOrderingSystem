@@ -63,7 +63,7 @@ export default function OrderManagement({ onBusyChange }) {
     <Pagination {...data} label="Orders" disabled={loading || !!error || busy.length > 0} onPageChange={value => page.setFilter("page", value)} onPageSizeChange={value => page.setFilter("pageSize", value)} />
     {detailsId && <OrderDetailsDialog orderId={detailsId} onClose={() => setDetailsId(null)} />}
     <ConfirmModal open={!!confirm} title={confirm?.type === "delete" ? "Delete order?" : "Cancel order?"}
-      message={confirm ? `${confirm.order.id} for ${confirm.order.customerName}: ${confirm.type === "delete" ? "permanently remove this order and its saved records?" : "mark this order as Cancelled? This cannot be undone."}` : ""}
+      message={confirm ? `${confirm.order.id} for ${confirm.order.customerName}: ${confirm.type === "delete" ? "hide this order from listings? Its saved records will be retained." : "mark this order as Cancelled? This cannot be undone."}` : ""}
       confirmLabel={confirm?.type === "delete" ? "Delete order" : "Cancel order"} onCancel={() => setConfirm(null)}
       onConfirm={() => perform(confirm.type, confirm.order, confirm.status)} />
   </section>;

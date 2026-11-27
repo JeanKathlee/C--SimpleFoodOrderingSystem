@@ -2,6 +2,7 @@ using System.Security.Claims;
 using System.Text.Encodings.Web;
 using FoodJS.Api.Data;
 using Microsoft.AspNetCore.Authentication;
+using Microsoft.AspNetCore.DataProtection;
 using Microsoft.AspNetCore.Hosting;
 using Microsoft.AspNetCore.Mvc.Testing;
 using Microsoft.AspNetCore.TestHost;
@@ -16,14 +17,16 @@ using Microsoft.Extensions.Options;
 namespace FoodJS.Api.Tests;
 
 // Runs the real Program/controllers/services/migrations against an isolated database.
-// Authentication is supplied ONLY by this test assembly while the team's JWT API is pending.
+// Most tests use an isolated test scheme; security tests can opt into real JWT authentication.
 internal sealed class AssignedApiFactory : WebApplicationFactory<Program>
 {
     private readonly SqliteConnection connection = new("Data Source=:memory:");
     private readonly string? databaseFile;
+    private readonly bool useTestAuthentication;
 
-    public AssignedApiFactory(bool fileDatabase = false)
+    public AssignedApiFactory(bool fileDatabase = false, bool useTestAuthentication = true)
     {
+        this.useTestAuthentication = useTestAuthentication;
         connection.Open();
         if (fileDatabase) databaseFile = Path.Combine(Path.GetTempPath(), $"foodjs-checkout-{Guid.NewGuid():N}.db");
     }
@@ -41,10 +44,17 @@ internal sealed class AssignedApiFactory : WebApplicationFactory<Program>
                 if (databaseFile is null) options.UseSqlite(connection);
                 else options.UseSqlite($"Data Source={databaseFile};Default Timeout=10;Pooling=False");
             });
-            services.AddAuthentication(TestAuthenticationHandler.SchemeName)
-                .AddScheme<AuthenticationSchemeOptions, TestAuthenticationHandler>(
-                    TestAuthenticationHandler.SchemeName, _ => { });
-            services.AddAuthorization();
+            if (useTestAuthentication)
+            {
+                services.AddAuthentication(TestAuthenticationHandler.SchemeName)
+                    .AddScheme<AuthenticationSchemeOptions, TestAuthenticationHandler>(
+                        TestAuthenticationHandler.SchemeName, _ => { });
+                services.AddAuthorization();
+            }
+            // Keep checkout quote protection isolated from the developer machine's
+            // persisted key ring. Tests must be repeatable and must not require
+            // access to the current Windows user's profile.
+            services.AddDataProtection().UseEphemeralDataProtectionProvider();
         });
     }
 

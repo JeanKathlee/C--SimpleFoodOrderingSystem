@@ -6,15 +6,12 @@ import process from 'node:process'
 export default defineConfig(({ mode }) => {
   const env = loadEnv(mode, process.cwd(), '')
   const csharpApi = env.CSHARP_API_URL || 'http://localhost:3002'
-  const referenceApi = env.REFERENCE_API_URL || 'http://localhost:3001'
   return {
   plugins: [react()],
   server: {
     proxy: {
-      // ARATIA's assigned APIs, including checkout's POST /api/orders.
-      '^/api/(menu|orders)(?:/|\\?|$)': csharpApi,
-      // Teammate-owned APIs continue using their current implementation.
-      '/api': referenceApi,
+      // React is the View; every API request uses the ASP.NET Core MVC/Web API backend.
+      '/api': csharpApi,
     },
   },
   }

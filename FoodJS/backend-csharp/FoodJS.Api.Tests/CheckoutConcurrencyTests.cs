@@ -1,8 +1,10 @@
+using FoodJS.Api.Controllers;
+using FoodJS.Api.Contracts;
+using FoodJS.Api.Services;
 using System.Net;
 using System.Net.Http.Json;
 using FoodJS.Api.Common;
 using FoodJS.Api.Data;
-using FoodJS.Api.Features.Orders;
 using FoodJS.Api.Models;
 using Microsoft.EntityFrameworkCore;
 using Microsoft.Extensions.DependencyInjection;

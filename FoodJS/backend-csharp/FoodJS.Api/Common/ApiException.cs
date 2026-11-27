@@ -16,6 +16,12 @@ public sealed class ApiExceptionFilter : IExceptionFilter
 {
     public void OnException(ExceptionContext context)
     {
+        if (context.Exception is BadHttpRequestException badRequest)
+        {
+            context.Result = new ObjectResult(new { message = badRequest.Message }) { StatusCode = badRequest.StatusCode };
+            context.ExceptionHandled = true;
+            return;
+        }
         if (context.Exception is not ApiException exception)
         {
             return;

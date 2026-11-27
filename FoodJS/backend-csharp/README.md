@@ -1,261 +1,189 @@
-# FoodJS C# Backend Team Template
+# FoodJS ASP.NET Core Backend
 
-This folder is the shared starting point for migrating the existing Express API
-to ASP.NET Core. The React frontend should not need to change: keep the same
-URLs, HTTP methods, status codes, JSON property names, and response shapes.
+FoodJS uses React for the View and ASP.NET Core API controllers for HTTP requests.
+Every feature follows this dependency direction:
 
-The existing Node backend remains in `../backend` as the working reference while
-the migration is in progress.
+    React View -> Controller -> Service -> Repository -> EF Core / SQLite
 
-## Run the template
+API controllers return JSON for React. There are no Razor views.
 
-From `FoodJS`:
+## Layer responsibilities
 
-```powershell
-npm run dev:backend:csharp
-```
+- Controllers bind input, read authenticated identity/roles, call services, and
+  return HTTP responses. They do not validate business rules or access data.
+- Services validate inputs, make business decisions, calculate prices/discounts,
+  enforce ownership and status rules, and map entities to response contracts.
+- Repositories execute queries, track additions/updates, load related records,
+  and persist changes. They return materialized records, never IQueryable.
+- IUnitOfWorkRepository owns SaveChanges, migrations, and database transactions.
+  All repositories share one scoped DbContext. Services select the workflow's
+  transaction boundary through this abstraction.
+- Models represent persisted entities; contracts represent request/response data.
+  Services assign business values to entities. EF tracking and persistence
+  happen in repositories.
 
-Or run the API directly:
+## Layer folders and feature locations
 
-```powershell
-dotnet watch --project backend-csharp/FoodJS.Api/FoodJS.Api.csproj
-```
+The API root is backend-csharp/FoodJS.Api/.
 
-The API listens on `http://localhost:3002`. Verify it at:
+- Controllers/AuthController.cs -> Services/AuthService.cs -> Repositories/UserRepository.cs
+- Controllers/UsersController.cs -> Services/UsersService.cs -> Repositories/UserRepository.cs
+- Controllers/MenuController.cs -> Services/MenuService.cs -> Repositories/MenuRepository.cs
+- Controllers/CategoriesController.cs -> Services/CategoryService.cs -> Repositories/CategoryRepository.cs
+- Controllers/CartController.cs -> Services/CartService.cs -> Repositories/CartRepository.cs
+- Controllers/OrdersController.cs -> Services/OrderService.cs -> Repositories/OrderRepository.cs
+- Controllers/CouponController.cs -> Services/CouponService.cs -> Repositories/CouponRepository.cs
+- Controllers/NotificationsController.cs -> Services/NotificationService.cs -> Repositories/NotificationRepository.cs
+- Controllers/AdminInsightsController.cs -> Services/AdminInsightsService.cs -> Repositories/AdminInsightsRepository.cs
+- Controllers/HealthController.cs -> Services/HealthService.cs
 
-```text
-GET http://localhost:3002/api/health
-```
+Models/ holds database entities, Contracts/ holds request and response DTOs,
+Data/ holds the EF context and independent JSON seed files, and Migrations/
+holds database schema history. Service interfaces live alongside their service
+implementations under Services/. React remains in ../frontend/src/; a Razor
+Views/ folder is not needed for the accepted React View layer.
 
-## Local development bridge
+Health has no repository because it does not access the database.
+ReferenceDataRepository supplies shared category/user/coupon/address/status data.
+Pure pricing and status rules (ItemChoiceRules, CouponRules, CartOptionPricing,
+and OrderStatusRules) live under Services/. Program.cs registers dependencies,
+configures HTTP/authentication, and calls startup services/repository infrastructure.
 
-Run Express with `npm run dev:backend`, C# with `npm run dev:backend:csharp`,
-and React with `npm run dev:frontend` in separate terminals from `FoodJS/`.
-The frontend sends `/api/menu` and `/api/orders` requests to C# on port 3002;
-the remaining APIs use Express on port 3001. Checkout submission uses C# orders.
+## Shopping cart example for the defense
 
-The `migration` launch profile enables a Development-only dependency adapter
-using a separate `foodjs.migration.db`. It imports the initial menu once, maps
-reference categories to database IDs, refreshes coupon dependencies, and obtains
-the current user's identity/role from Express `GET /api/users/me`. It never
-grants an admin role from the browser's saved user object. Existing Express
-orders are not imported. The adapter is temporary; production authentication and
-the teammate-owned APIs still require integration.
+1. ProductDetails.jsx posts a menu ID, quantity, and selected drink to /api/cart/items.
+2. CartController.Add forwards the request and authenticated user ID to ICartService.
+3. CartService validates quantity (1-99), requires a recognized drink, requests
+   menu/cart records, and calculates the authoritative unit price.
+4. CartRepository loads matching records and stages new cart/items. CartService
+   decides whether to merge quantities or keep different drink choices separate.
+5. CartService asks IUnitOfWorkRepository to save. The controller returns HTTP 201.
+6. React refreshes the bag. Browser-supplied prices never determine server totals.
 
-Menu reads are public; adding/editing/deleting requires a valid admin session.
-Express demo mode maps invalid or expired supplied tokens to its demo customer.
-The browser may still display a cached admin dashboard while C# correctly
-returns HTTP 403 for that customer. Sign out and sign in with the admin account
-to refresh the session. Permission failures return a JSON message; the menu UI
-also handles empty/non-JSON API errors without misreporting a connection failure.
+List, update, remove, and clear use these same layers and enforce ownership.
 
-## Project organization
+## PR #4 integration
 
-- `Controllers/` contains small cross-cutting controllers such as health checks.
-- `Features/<Feature>/` owns a complete business feature: controller, request and
-  response contracts, interface, and implementation.
-- `Program.cs` contains dependency registration and the HTTP middleware pipeline.
-- `appsettings*.json` contains safe, non-secret configuration.
+Reviewed commit: 51c64eb5894e596f8e4604444214e1a813ac3b43.
+Its Menu/Order/ReferenceData/UnitOfWork repository design and retained-record
+behavior were integrated locally by adapting the source changes.
+This is source integration, not a GitHub merge or push. The older PR code was
+not copied over the newer checkout, contact snapshots, choice pricing,
+pagination, idempotency, or password-recovery implementations.
 
-The Menu feature uses Entity Framework Core with SQLite and preserves the
-existing menu response contracts.
+EfMenuService was consolidated into MenuService. MenuController now uses one
+IMenuService for reads and mutations. Repositories were added for all remaining
+features, auth development seeds, and coupon/status seeds. The former Features/
+layout has been removed; namespaces, imports, registrations, and test references
+use the separate layer folders.
 
-## Menu Management pagination
+## Soft deletion for every application record
 
-The admin Menu Management screen uses `GET /api/menu/paged`. It accepts `page`
-(default 1), `pageSize` (default 10, maximum 50), and optional `search`, `categoryId`,
-and `isAvailable` filters. Search matches item names and descriptions. The response
-contains `items`, `totalCount`, `page`, `pageSize`, and `totalPages`. Filtering,
-counting, and page selection happen in the database; items sort by name then ID.
-An out-of-range page is clamped to the last page, including after deletion.
+Every persisted application entity implements Models/ISoftDeletable.cs and has
+an IsDeleted column defaulting to false. Deleting a record sets that flag to true;
+it never removes the row. This applies to users, categories, coupons, menu items,
+orders, cart lines (including Clear), and removal of a saved profile address.
+The remaining related and lookup entities also carry the flag for consistency.
 
-The existing `GET /api/menu` array response remains available for existing callers.
-The new admin screen requires this C# endpoint; the Express reference is unchanged.
-Category loading still depends on the category API owned by the assigned teammate.
+- Services decide when deletion is allowed and set IsDeleted. Repositories own
+  persistence and expose no physical Remove/RemoveRange or bulk DELETE methods.
+- Normal reads/updates exclude deleted records through EF query filters. Deleted
+  parent categories also hide their menu items and related cart lines.
+- Data/FoodJSDbContext.cs converts accidental EF Deleted states into flag-only
+  updates for synchronous and asynchronous saves. EF cascade/orphan deletion is
+  deferred, and all foreign keys use Restrict to protect retained relationships.
+- Deleted accounts cannot log in, reset passwords, or use existing JWTs. Account
+  deletion retains all linked records; administrators can still review past orders.
+- Historical order details load retained addresses/statuses explicitly without
+  joining the live user, menu, or coupon. Saved delivery, prices, names, choices,
+  and discounts remain readable after related records are deleted.
+- Cart re-add creates a new active row rather than reviving an old line. Clearing
+  a bag flags only that customer's lines, including hidden items.
+- Deleted emails and coupon codes remain reserved. Demo seeding checks retained
+  records so startup cannot silently recreate deleted accounts, menu, or coupons.
+- Checkout submission ledgers are consulted even when flagged, so safe retries
+  cannot create duplicate orders. Deleted-order replay still returns HTTP 409.
+- Categories with active menu items still return HTTP 409. Retained deleted menu
+  items do not prevent an otherwise-empty category from being soft-deleted.
+- IsAvailable, IsActive, Archived, and Cancelled remain separate business states.
 
-## Order Management pagination and details
+SoftDeleteAllRecords adds the remaining flags and restrictive foreign keys on top
+of RetainMenuAndOrders and ProtectRetainedRelationships. Existing records retain
+their data and receive false flags. No public restore/purge endpoint is added;
+explicitly restoring a permitted record means setting its flag back to false.
 
-- `GET /api/orders/paged` lists only the authenticated customer's orders.
-- `GET /api/orders/admin/paged` lists all customers' orders for admins only.
-- `GET /api/orders/admin/{id}` provides complete saved details for admins;
-  the existing customer detail route keeps its ownership check.
+Migrations are tested on isolated SQLite databases, including upgrades and
+rollback/reapply of legacy schemas. Startup applies pending migrations on the
+next normal run. Stop old servers and back up important data before upgrading.
 
-Paged routes accept `page` (default 1), `pageSize` (10, maximum 50), `search`
-(order ID or saved customer name, up to 120 characters), `status`, `fromDate`,
-and `toDate`. Calendar dates use Philippine time (UTC+8), with an exclusive
-next-day upper bound. Invalid ranges return HTTP 400. Results contain `items`,
-`totalCount`, `page`, `pageSize`, and `totalPages`; summary items include order ID,
-customer name, status, total, creation time, and the sum of item quantities.
+## Run locally
 
-SQLite parameterized queries compare/order creation instants with `julianday`
-and apply `LIMIT/OFFSET` before materializing a page. Summary responses do not
-load every order's item details or history. Sorting is newest first with ID as
-the tie breaker; pages clamp after deletions. Existing array routes remain for
-compatibility with other callers, including the separate dashboard analytics.
+From FoodJS/, start these commands in separate terminals:
 
-Admin UI and customer history use these paged routes. Admin details are fetched
-on demand. Mutation controls lock during requests, cancellation requires
-confirmation, and failed confirmations keep their error message and retry path.
-Tracking shows saved delivery details, totals, item choices, and status history.
-Notifications still depend on the teammate-owned API and the development bridge
-does not migrate or synchronize that API's records.
+    npm run dev:backend
+    npm run dev:frontend
 
-## Checkout item choices
+React: http://localhost:5173
+API: http://localhost:3002
+Health: http://localhost:3002/api/health
 
-Order requests accept an optional `selectedChoice` on each item. The server uses
-the current menu price plus the recognized upgrade price: `Go Regular Iced Tea`
-adds PHP 0, `Go Medium Iced Tea` adds PHP 45, and `Go Large Iced Tea` adds PHP 50.
-Missing/blank choices keep the base menu price; unknown choices return HTTP 400.
-Client-supplied item prices and add-on amounts do not determine the order total.
-Keep these values aligned with `frontend/src/pages/ProductDetails.jsx`.
+The backend command explicitly selects the http launch profile.
+To run directly:
 
-Items merge only when both the menu ID and selected choice match. The persisted
-order line stores the choice and the complete unit price, including the upgrade.
-Order responses return `selectedChoice` and that saved unit price in `price`.
-The `PreserveItemChoices` migration adds nullable choice columns to order and cart
-items, preserving existing rows without a choice.
+    dotnet watch --project backend-csharp/FoodJS.Api/FoodJS.Api.csproj --launch-profile http
 
-The C# cart feature must preserve `selectedChoice` and distinguish variants when
-adding, updating, or removing lines. Variant-specific cart operations are deferred
-to that implementation and frontend integration. The existing frontend cart
-mutation routes are unchanged. Keep `../backend/` as the migration reference;
-implement new backend behavior in this C# project.
+Development accounts: admin@foodjs.demo / admin123 and
+customer@foodjs.demo / customer123. The old Express backend, development migration
+adapter, and migration launch profile have been retired. Their files (including
+local Express JSON data) are preserved at the repository root in the ignored
+.legacy-backups/express-20261125-1fb1078e/ directory. The active C# backend and
+its Data/Seed files run independently of that backup. The four tests for the
+retired adapter were removed; the active backend regression tests remain.
 
-Run the SQLite order/pricing regression tests with:
+## Preserved behavior
 
-```powershell
-dotnet test backend-csharp/FoodJS.Backend.slnx
-```
+Existing /api/users, /api/auth, /api/menu, /api/categories, /api/cart,
+/api/orders, /api/coupons, /api/notifications, /api/admin-insights, and
+/api/health routes keep React-compatible contracts.
 
-## Saved order checkout details
+Menu paging supports search, category, availability, page, and pageSize (1-50).
+Public/customer paging cannot expose unavailable items; admins can filter them.
+Order paging supports owner/admin scope, search, status, and Philippine calendar
+dates. Repositories apply parameterized SQL and LIMIT/OFFSET before materializing
+pages. Services validate filters, clamp pages, and produce response DTOs.
 
-Orders store the submitted customer name and mobile number, plus the validated
-coupon code. The existing `customerName`, `mobileNumber`, and `couponCode` response
-fields read those saved values for details, tracking, and customer/admin lists.
-Later profile edits or coupon renaming/deletion do not change historical orders.
-An omitted mobile number is stored as an empty string; no applied coupon is null.
+Checkout uses server prices, ten-minute quote review tokens, and UUID submission
+keys for safe retries. Order, items, payment, history, notification, address,
+coupon usage, and submission ledger commit together. Drink upgrades are regular
++PHP 0, medium +PHP 45, and large +PHP 50. Cart additions require a drink; legacy
+order requests without a choice remain compatible.
 
-The `PreserveOrderCheckoutDetails` migration adds nullable columns to `Orders`.
-For legacy rows it copies the current profile name and mobile number once, since
-their original checkout values were never stored. Unrecoverable coupon codes
-remain null. New orders save their actual checkout values when created.
+Google OAuth requires configured credentials and the allowed redirect URI.
+Password reset uses hashed one-time tokens. Development/Testing returns tokens
+for local testing; production email delivery still needs integration.
+These external configuration requirements are unchanged by this refactor.
 
-## Verification of ARATIA's assigned features
+## Verification
 
-Run the regression suite from `FoodJS/`:
+From FoodJS/:
 
-```powershell
-dotnet test backend-csharp/FoodJS.Backend.slnx
-```
+    dotnet test backend-csharp/FoodJS.Backend.slnx -c Release
+    npm run build
+    npm run lint --prefix frontend
 
-`AssignedApiFlowTests` exercises the real application startup, migrations,
-controllers, JSON contracts, authorization policies, and services over an
-in-process HTTP test server with isolated SQLite storage.
+ArchitectureBoundaryTests checks service-only controller dependencies, no EF
+references or database queries in service/controller source files,
+and no deferred query/EF types exposed by repository contracts.
 
-| Assignment | Automated coverage |
-| --- | --- |
-| Menu Management, WBS 21-25 | List, create, edit, availability, delete, description/image preservation, invalid inputs, and admin-only mutations. |
-| Checkout, WBS 38-42 | Order submission, server pricing, coupons, saved delivery addresses, and rejection of unavailable items. Existing SQLite tests also verify choice and contact snapshots. |
-| Order Management, WBS 44-50 | Customer/admin lists, details/tracking history, creation, status transitions, cancellation eligibility, ownership, and deletion with related records. |
+AssignedRepositoryFlowTests adapts the PR tests and verifies retained data,
+ownership, pricing, transaction rollback after a save failure, restrictive
+foreign keys, seed behavior, and real schema upgrades. Other tests cover auth,
+password recovery, cart variants, review tokens, contact snapshots, pagination,
+and concurrent/replayed checkout submissions.
 
-Test authentication is defined only inside the test project; users, roles,
-categories, and coupons are seeded as dependency data. This does not implement or
-verify teammate-owned authentication/profile/cart/category/coupon/notification APIs.
-Browser checkout summary/map behavior and full frontend-to-C# integration remain
-team acceptance checks once those APIs are available. The suite currently has 107
-passing cases; PR approval and merging remain with the project lead.
+SoftDeletePersistenceTests verifies all application entity flags and foreign keys,
+sync/async delete safeguards, restoration, and real migration of retained data.
+SoftDeleteApiTests uses real JWT authentication to verify delete paths, revoked
+account access, historical orders, reserved identities, and retained cart rows.
 
-## Reviewed checkout and safe retries
-
-The updated customer checkout uses authenticated `POST /api/orders/quote` with
-`items` (menu ID, quantity, selected choice) and optional `couponCode`. It returns
-current menu prices, complete item quantities, subtotal, discount, total, applied
-coupon, and a protected `quoteToken` with a ten-minute expiry. Quoting does not
-create an order, consume a coupon, save an address, or clear a cart.
-
-Checkout sends that token and a UUID `idempotencyKey` with `POST /api/orders`.
-The server recalculates pricing and rejects changed, expired, tampered, or
-other-user reviews with HTTP 409 before saving. Reviewed checkout requires a
-recipient, Philippine mobile number, delivery address, and cash payment; card
-payments have no gateway and are disabled in the updated UI. Existing clients
-without a quote retain the earlier request contract.
-
-`GuardCheckoutSubmissions` adds a submission ledger keyed by user and UUID.
-The ledger, order, items, payment, history, notification, and coupon usage commit
-in the same SQLite transaction. A retry with the same details returns the saved
-order even if menu prices/coupons later change. Different details with the same
-key return 409. Ledger entries remain after order deletion so an old attempt
-cannot recreate a deleted order. Data Protection protects quote tokens; deployed
-instances must share a persisted key ring when serving the same database.
-
-The browser stores the exact pending submission in session storage before
-posting. Lost responses/timeouts can be retried with that same key after reload.
-Order acceptance navigates directly to saved confirmation details. Bag cleanup
-is a separate, retryable operation; failure never resubmits the order. Cleanup
-keeps a changed bag and lets the customer explicitly retain it for later.
-
-Checkout/review/confirmation and shared order details paginate item types at
-10/20/50 rows while totals include all quantities. This bounds rendered rows;
-the current teammate-owned cart API still returns the complete cart. Delivery
-address search returns at most five results, and the optional map remains mounted
-through unrelated form edits. No cart, profile, authentication, category, coupon
-management, or notification endpoint is implemented by these changes.
-
-Checkout HTTP tests cover quotes, stale/expired/other-user/tampered tokens,
-contact validation, replay conflicts, deleted orders, and simultaneous retries
-on separate SQLite connections. Browser QA uses isolated mock dependencies;
-the running local bridge/proxy was also checked for successful quote responses.
-
-## Suggested team ownership
-
-- Lead: shared architecture, code review, configuration, deployment, and database
-  migrations.
-- Member 1: authentication and users.
-- Member 2: menu and categories.
-- Member 3: cart and orders.
-- Member 4: coupons, notifications, and admin insights.
-
-Adjust the assignments to match the size of the team. One feature should have
-one primary owner to avoid conflicting edits.
-
-## Existing API contract to preserve
-
-- `/api/auth`
-- `/api/users`
-- `/api/menu`
-- `/api/categories`
-- `/api/cart`
-- `/api/orders`
-- `/api/coupons`
-- `/api/notifications`
-- `/api/admin-insights`
-- `/api/health`
-
-Before implementing an endpoint, read its matching file in `../backend/routes`.
-Do not rename JSON fields unless the frontend is updated in the same pull request.
-
-## Team rules
-
-1. Branch from the C# migration branch using `feature/csharp-<feature>`.
-2. Keep controllers thin; business rules belong in a service.
-3. Use request and response DTOs instead of exposing database entities.
-4. Use asynchronous methods for database and network operations.
-5. Store secrets in environment variables, never in `appsettings.json`.
-6. Return the same status codes and `{ "message": "..." }` errors as the Node API.
-7. Build the solution before opening a pull request:
-
-   ```powershell
-   dotnet build backend-csharp/FoodJS.Backend.slnx
-   ```
-
-8. A migrated feature is complete only when its frontend flow works against the
-   C# API and its automated tests pass.
-
-## Recommended migration order
-
-1. Database entities and Entity Framework Core setup.
-2. JWT authentication, Google OAuth, and role authorization.
-3. Users, menu, and categories.
-4. Cart, coupons, and orders.
-5. Notifications, email, and admin insights.
-6. Deployment configuration and removal of the Node backend after acceptance.
+Tests do not mutate your normal application database.

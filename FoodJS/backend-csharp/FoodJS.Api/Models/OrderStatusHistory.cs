@@ -1,6 +1,6 @@
 namespace FoodJS.Api.Models;
 
-public class OrderStatusHistory
+public class OrderStatusHistory : ISoftDeletable
 {
     public int Id { get; set; }
 
@@ -19,4 +19,6 @@ public class OrderStatusHistory
     public string Source { get; set; } = "system";
 
     public DateTimeOffset ChangedAt { get; set; } = DateTimeOffset.UtcNow;
+
+    public bool IsDeleted { get; set; }
 }

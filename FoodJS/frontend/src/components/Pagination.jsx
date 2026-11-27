@@ -7,7 +7,7 @@ export default function Pagination({ page, pageSize, totalCount, totalPages, onP
   const last = Math.min(page * pageSize, totalCount);
   const start = Math.max(1, Math.min(page - 2, totalPages - 4));
   const pages = Array.from({ length: Math.min(5, totalPages) }, (_, i) => start + i);
-  const resultLabel = totalCount === 1 && label.endsWith("s") ? label.slice(0, -1) : label;
+  const resultLabel = totalCount !== 1 ? label : label.replace(/ies$/i, "y").replace(/sses$/i, "ss").replace(/(?<!s)s$/i, "");
   return (
     <nav className="list-pagination" aria-label={`${label} pagination`}>
       <p aria-live="polite">{first}–{last} of {totalCount} {resultLabel.toLowerCase()}</p>

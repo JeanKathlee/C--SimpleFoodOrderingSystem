@@ -1,7 +1,8 @@
+using FoodJS.Api.Controllers;
+using FoodJS.Api.Contracts;
+using FoodJS.Api.Services;
 using Xunit;
 using FoodJS.Api.Common;
-using FoodJS.Api.Features.Checkout;
-using FoodJS.Api.Features.Orders;
 using FoodJS.Api.Models;
 
 namespace FoodJS.Api.Tests;
@@ -135,6 +136,20 @@ public class PublicIdTests
 public class ImageRulesTests
 {
     private static string DataUrl(string type, params byte[] bytes) => $"data:image/{type};base64,{Convert.ToBase64String(bytes)}";
+
+    [Theory]
+    [InlineData(2 * 1024 * 1024 + 1, true)]
+    [InlineData(5 * 1024 * 1024, true)]
+    [InlineData(5 * 1024 * 1024 + 1, false)]
+    public void Food_images_allow_five_mebibytes_but_profile_limit_is_unchanged(int size, bool allowed)
+    {
+        Assert.Equal(5 * 1024 * 1024, ImageRules.MenuMaxBytes);
+        var bytes = new byte[size];
+        bytes[0] = 0x89; bytes[1] = 0x50; bytes[2] = 0x4E; bytes[3] = 0x47;
+        var image = DataUrl("png", bytes);
+        Assert.Equal(allowed ? null : "Image must be 5 MB or smaller.", ImageRules.CheckMenuImage(image));
+        Assert.Equal(ImageRules.SizeError, ImageRules.Check(image));
+    }
 
     [Fact]
     public void Real_images_links_and_empty_are_allowed()

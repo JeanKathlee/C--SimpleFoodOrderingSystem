@@ -2,6 +2,7 @@ import { useEffect, useRef } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { saveAuthSession } from "../lib/auth";
 import { useNotification } from "../hooks/useNotification";
+import { consumeGoogleState } from "../lib/googleAuth";
 
 export default function AuthCallback() {
   const navigate = useNavigate();
@@ -15,10 +16,11 @@ export default function AuthCallback() {
 
     const handleCallback = async () => {
       const code = params.get("code");
+      const state = params.get("state");
       const redirectUri = `${window.location.origin}/auth/callback`;
 
-      if (!code) {
-        errorNotif("No authorization code received");
+      if (!code || !consumeGoogleState(state)) {
+        errorNotif("Google authentication could not be verified. Please try again.");
         navigate("/login");
         return;
       }

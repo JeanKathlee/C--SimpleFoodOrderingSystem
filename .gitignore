@@ -12,6 +12,8 @@ backend/.env
 *.db
 *.db-shm
 *.db-wal
+.data-protection-keys/
+.legacy-backups/
 
 # Ignore logs
 npm-debug.log*

@@ -1,6 +1,6 @@
 namespace FoodJS.Api.Models;
 
-public class Address
+public class Address : ISoftDeletable
 {
     public int Id { get; set; }
 
@@ -21,4 +21,6 @@ public class Address
     public string Country { get; set; } = "Philippines";
 
     public bool IsDefault { get; set; }
+
+    public bool IsDeleted { get; set; }
 }

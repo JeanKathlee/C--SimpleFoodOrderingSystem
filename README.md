@@ -1,85 +1,94 @@
 # FoodJS
 
-A full-stack food ordering platform built around a polished customer journey and a practical restaurant administration dashboard.
+A full-stack food ordering platform with a React client and an ASP.NET Core
+MVC/Web API backend.
 
 ![FoodJS entity relationship diagram](ERD_group4.png)
 
 ## Highlights
 
-- Responsive menu discovery, product details, cart, checkout, and order history
-- Live order tracking with customer notifications
-- Role-based authentication for customers and administrators
-- Admin analytics, revenue overview, order management, menu categories, and coupons
-- Google OAuth support and optional email notifications
-- REST API backed by lightweight JSON persistence for an easy local demo
+- Responsive menu, product customization, cart, checkout, and order history
+- Live order tracking and in-app customer notifications
+- JWT authentication with customer and administrator roles
+- Admin analytics, orders, menu categories, customers, and coupons
+- Google OAuth support when credentials are configured
+- Entity Framework Core with SQLite persistence
 
 ## Tech stack
 
-- **Frontend:** React 19, React Router, Vite, Framer Motion, Leaflet
-- **Backend:** Node.js, Express, JWT, bcrypt, Nodemailer
-- **Tooling:** ESLint and npm scripts
+- **View:** React 19, React Router, Vite, Framer Motion, Leaflet
+- **Backend:** ASP.NET Core controllers, C# services, and repositories
+- **Model/data:** Entity Framework Core and SQLite
+- **Tooling:** .NET 10 SDK, ESLint, npm, Docker
 
 ## Run locally
 
-Requirements: Node.js 20+ and npm.
+Requirements: Node.js 20+, npm, and the .NET 10 SDK.
 
-```bash
+```powershell
 cd FoodJS
 npm run install:all
 ```
 
-Start the API with `npm run dev:backend`. In a second terminal, run `npm run dev:frontend` from the same directory. Open `http://localhost:5173`; the API runs at `http://localhost:3001`.
+Start the C# API:
+
+```powershell
+npm run dev:backend
+```
+
+In another terminal, start React:
+
+```powershell
+npm run dev:frontend
+```
+
+Open `http://localhost:5173`. The API runs at `http://localhost:3002`.
+
+Development administrator: `admin@foodjs.demo` / `admin123`.
 
 ## Configuration
 
-Create `FoodJS/backend/.env` when enabling integrations:
+Configure secrets with environment variables or .NET user secrets. Never
+commit real credentials.
 
-```env
-PORT=3001
-JWT_SECRET=replace-with-a-long-random-value
-GOOGLE_CLIENT_ID=
-GOOGLE_CLIENT_SECRET=
-GOOGLE_REDIRECT_URI=http://localhost:5173/auth/callback
-SMTP_HOST=
-SMTP_PORT=587
-SMTP_USER=
-SMTP_PASS=
-SMTP_FROM=
-SMTP_SECURE=false
+```powershell
+dotnet user-secrets set "Jwt:Secret" "replace-with-a-long-random-value" --project FoodJS/backend-csharp/FoodJS.Api/FoodJS.Api.csproj
+dotnet user-secrets set "Google:ClientSecret" "your-google-client-secret" --project FoodJS/backend-csharp/FoodJS.Api/FoodJS.Api.csproj
 ```
 
-Google OAuth and SMTP are optional for the core local ordering flow. Never commit real credentials.
-
-`DEMO_MODE` defaults to enabled so portfolio visitors can enter any email and password to explore the customer experience. Set `DEMO_MODE=false` to require registered credentials.
-
-Demo administrator access: `admin@foodjs.demo` / `admin123`.
+Google OAuth must authorize `http://localhost:5173/auth/callback`.
 
 ## Project structure
 
 ```text
 FoodJS/
-├── frontend/   React client and admin dashboard
-└── backend/    Express API, routes, middleware, and demo data
+├── frontend/         React views
+└── backend-csharp/   ASP.NET Core API and tests
+    └── FoodJS.Api/
+        ├── Controllers/
+        ├── Services/
+        ├── Repositories/
+        ├── Models/
+        ├── Contracts/
+        ├── Data/
+        └── Migrations/
 ```
 
 ## Quality checks
 
-```bash
-cd FoodJS/frontend
-npm run lint
+```powershell
+cd FoodJS
+npm run lint --prefix frontend
 npm run build
+dotnet test backend-csharp/FoodJS.Api.Tests/FoodJS.Api.Tests.csproj -c Release
 ```
 
-## Deploy a live demo
+## Deployment
 
-This repository includes a Render Blueprint that serves the production React build and Express API from one public URL.
-
-1. Push the repository to GitHub.
-2. In Render, choose **New → Blueprint**.
-3. Connect this repository and apply `render.yaml`.
-4. Add the generated `onrender.com` URL to your portfolio as the live demo link.
-
-The free service uses temporary filesystem storage. Demo orders and account changes may reset when the service restarts or redeploys; use a managed database before treating it as a production system.
+The included Dockerfile builds React, publishes ASP.NET Core, and serves both
+from one process. The Render Blueprint uses that container. Configure a strong
+JWT secret and bootstrap administrator credentials in the deployment service.
+SQLite requires persistent storage for durable production data.
 
 ## License
 
