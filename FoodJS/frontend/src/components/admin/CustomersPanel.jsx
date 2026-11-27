@@ -1,3 +1,10 @@
+import styles from "./CustomersPanel.module.css";
+import modalStyles from "../ui/Modal.module.css";
+import adminStyles from "../../pages/Dashboard.module.css";
+import Button from "../ui/Button";
+import { useEffect, useState } from "react";
+import Pagination from "../Pagination";
+import usePagination from "../../hooks/usePagination";
 function formatDate(value) {
   if (!value) {
     return "Not available";
@@ -17,10 +24,6 @@ function formatCurrency(value) {
     maximumFractionDigits: 0,
   }).format(value);
 }
-
-import { useEffect, useState } from "react";
-import Pagination from "../Pagination";
-import usePagination from "../../hooks/usePagination";
 
 export default function CustomersPanel({
   customers,
@@ -78,16 +81,16 @@ export default function CustomersPanel({
 
   return (
     <>
-      <section className="admin-panel">
-        <div className="admin-panel-header">
+      <section className={adminStyles["admin-panel"]}>
+        <div className={adminStyles["admin-panel-header"]}>
           <div>
             <h2>Customers</h2>
-            <p className="admin-panel-subtitle">View customer account details and order history.</p>
+            <p className={adminStyles["admin-panel-subtitle"]}>View customer account details and order history.</p>
           </div>
         </div>
 
-        <div className="admin-table-wrap">
-          <table className="admin-table">
+        <div className={adminStyles["admin-table-wrap"]}>
+          <table className={adminStyles["admin-table"]}>
             <thead>
               <tr>
                 <th>Customer</th>
@@ -100,7 +103,7 @@ export default function CustomersPanel({
             <tbody>
               {customers.length === 0 ? (
                 <tr>
-                  <td colSpan="5" className="admin-empty-cell">No customers found.</td>
+                  <td colSpan="5" className={adminStyles["admin-empty-cell"]}>No customers found.</td>
                 </tr>
               ) : (
                 customerPager.pageItems.map((customer) => (
@@ -110,14 +113,14 @@ export default function CustomersPanel({
                     <td>{customer.mobileNumber || "Not provided"}</td>
                     <td>{formatDate(customer.createdAt)}</td>
                     <td>
-                      <button
+                      <Button variant="primary"
                         type="button"
-                        className="admin-btn admin-btn-primary admin-table-action"
+                        className={adminStyles["admin-table-action"]}
                         onClick={() => onViewCustomer(customer)}
                         aria-label={`View profile of ${customer.name || `${customer.firstName} ${customer.lastName}`}`}
                       >
                         View Profile
-                      </button>
+                      </Button>
                     </td>
                   </tr>
                 ))
@@ -129,35 +132,35 @@ export default function CustomersPanel({
       </section>
 
       {selectedCustomer && (
-        <div className="admin-modal-backdrop" role="presentation" onClick={onClose}>
+        <div className={modalStyles.backdrop} role="presentation" onClick={onClose}>
           <div
-            className="admin-modal customer-profile-modal"
+            className={styles["customer-profile-modal"]}
             role="dialog"
             aria-modal="true"
             aria-label={`Profile for ${selectedCustomer.name}`}
             onClick={(event) => event.stopPropagation()}
           >
-            <div className="admin-panel-header">
+            <div className={adminStyles["admin-panel-header"]}>
               <div>
                 <h3>{selectedCustomer.name}</h3>
-                <p className="admin-panel-subtitle">Customer profile</p>
+                <p className={adminStyles["admin-panel-subtitle"]}>Customer profile</p>
               </div>
-              <div className="admin-item-actions">
-                <button
+              <div className={adminStyles["admin-item-actions"]}>
+                <Button variant="primary"
                   type="button"
-                  className="admin-btn admin-btn-primary"
+
                   onClick={() => setEditing((current) => !current)}
                 >
                   {editing ? "Cancel Edit" : "Edit Profile"}
-                </button>
-                <button type="button" className="admin-btn admin-btn-light" onClick={onClose}>
+                </Button>
+                <Button variant="light" type="button" onClick={onClose}>
                   Close
-                </button>
+                </Button>
               </div>
             </div>
 
             {editing ? (
-              <form className="customer-profile-form" onSubmit={handleSubmit}>
+              <form className={styles["customer-profile-form"]} onSubmit={handleSubmit}>
                 <label>
                   <span>First name</span>
                   <input name="firstName" value={form?.firstName || ""} onChange={handleFormChange} required />
@@ -178,12 +181,12 @@ export default function CustomersPanel({
                   <span>Address</span>
                   <textarea name="address" value={form?.address || ""} onChange={handleFormChange} />
                 </label>
-                <div className="admin-modal-actions">
-                  <button type="submit" className="admin-btn admin-btn-primary">Save Changes</button>
+                <div className={modalStyles.actions}>
+                  <Button variant="primary" type="submit" >Save Changes</Button>
                 </div>
               </form>
             ) : (
-              <dl className="customer-profile-details">
+              <dl className={styles["customer-profile-details"]}>
                 <div><dt>Email</dt><dd>{selectedCustomer.email || "Not provided"}</dd></div>
                 <div><dt>Mobile number</dt><dd>{selectedCustomer.mobileNumber || "Not provided"}</dd></div>
                 <div><dt>Address</dt><dd>{selectedCustomer.address || "Not provided"}</dd></div>
@@ -195,12 +198,12 @@ export default function CustomersPanel({
 
             {!editing && (
               <>
-                <h4 className="customer-profile-section-title">Recent orders</h4>
+                <h4 className={styles["customer-profile-section-title"]}>Recent orders</h4>
                 {selectedOrders.length === 0 ? (
-                  <p className="admin-panel-subtitle">This customer has no orders.</p>
+                  <p className={adminStyles["admin-panel-subtitle"]}>This customer has no orders.</p>
                 ) : (
-                  <div className="admin-table-wrap">
-                    <table className="admin-table">
+                  <div className={adminStyles["admin-table-wrap"]}>
+                    <table className={adminStyles["admin-table"]}>
                       <thead>
                         <tr><th>Order ID</th><th>Status</th><th>Total</th><th>Created</th></tr>
                       </thead>
@@ -208,7 +211,7 @@ export default function CustomersPanel({
                         {orderPager.pageItems.map((order) => (
                           <tr key={order.id}>
                             <td>{order.id}</td>
-                            <td><span className={`admin-status ${order.status.toLowerCase()}`}>{order.status}</span></td>
+                            <td><span className={[adminStyles["admin-status"], adminStyles[order.status.toLowerCase()]].filter(Boolean).join(" ")}>{order.status}</span></td>
                             <td>{formatCurrency(order.total)}</td>
                             <td>{formatDate(order.createdAt)}</td>
                           </tr>

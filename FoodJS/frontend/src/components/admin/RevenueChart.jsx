@@ -1,3 +1,4 @@
+import styles from "../../pages/Dashboard.module.css";
 function formatCompact(value) {
   return new Intl.NumberFormat("en", {
     notation: "compact",
@@ -28,7 +29,7 @@ function generateWeeklyRevenueFromOrders(orders) {
   // Get the last 7 days
   const today = new Date();
   const days = [];
-  
+
   for (let i = 6; i >= 0; i--) {
     const d = new Date(today);
     d.setDate(d.getDate() - i);
@@ -61,7 +62,7 @@ export default function RevenueChart({ weeklyRevenue, orders = [], dateRange = {
       try {
         const start = new Date(dateRange.fromDate);
         const end = new Date(dateRange.toDate);
-        
+
         const dateArray = [];
         const current = new Date(start);
         while (current <= end) {
@@ -100,8 +101,8 @@ export default function RevenueChart({ weeklyRevenue, orders = [], dateRange = {
   const maxValue = Math.max(...chartData.map((entry) => entry.amount), 1);
 
   return (
-    <section className="admin-panel">
-      <div className="admin-panel-header">
+    <section className={styles["admin-panel"]}>
+      <div className={styles["admin-panel-header"]}>
         <h2>Revenue Chart</h2>
         {orders && orders.length > 0 && (
           <span style={{ fontSize: "12px", color: "#666" }}>
@@ -109,14 +110,14 @@ export default function RevenueChart({ weeklyRevenue, orders = [], dateRange = {
           </span>
         )}
       </div>
-      <div className="admin-revenue-chart">
+      <div className={styles["admin-revenue-chart"]}>
         {chartData.map((entry, index) => {
           const height = `${Math.round((entry.amount / maxValue) * 100)}%`;
           return (
-            <div className="admin-chart-col" key={entry.date || entry.day}>
-              <div className="admin-chart-track">
+            <div className={styles["admin-chart-col"]} key={entry.date || entry.day}>
+              <div className={styles["admin-chart-track"]}>
                 <div
-                  className="admin-chart-bar"
+                  className={styles["admin-chart-bar"]}
                   style={{ height, animationDelay: `${index * 80}ms` }}
                   title={`${entry.day} (${entry.date}): ${entry.amount}`}
                 />

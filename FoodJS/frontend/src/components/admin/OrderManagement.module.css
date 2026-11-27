@@ -1,0 +1,7 @@
+.management {
+  composes: admin-panel from "../../pages/Dashboard.module.css";
+  padding: 24px;
+  background: #fffdfa;
+}
+.management [data-ui-button] { min-height:42px; font-size:13px; white-space:nowrap; }
+@media (max-width:760px) { .management { padding:16px; } }

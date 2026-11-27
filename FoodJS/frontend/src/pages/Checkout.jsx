@@ -2,7 +2,7 @@ import { useCallback, useEffect, useRef, useState } from "react";
 import { Link, useNavigate } from "react-router-dom";
 import DeliveryMapPicker from "../components/DeliveryMapPicker";
 import OrderItemsList from "../components/OrderItemsList";
-import ConfirmModal from "../components/admin/ConfirmModal";
+import ConfirmModal from "../components/ui/Modal";
 import { orderMoney } from "../lib/orders";
 import { getAuthSession } from "../lib/auth";
 import { PHONE, normalizePhone, checkoutRequest, quoteRequest, readCheckout, saveCheckout, clearCheckout } from "../lib/checkout";
@@ -171,7 +171,7 @@ export default function Checkout() {
           <button type="submit" className="client-btn primary checkout-place-order" disabled={locked || quoting || cartLoading || profileLoading || !!cartError || !cart.length}>{preparing ? "Checking current total…" : "Review order"}</button>
         </section></aside>
     </form>}
-    <ConfirmModal open={!!review} title="Review and place your order" message="Check the recipient, delivery address, and current total." confirmLabel={pending ? "Retry same submission safely" : "Place order"} cancelLabel="Back to checkout" confirmVariant="primary" dialogClassName="order-details-dialog" onCancel={() => setReview(null)} onConfirm={submit}>
+    <ConfirmModal open={!!review} title="Review and place your order" message="Check the recipient, delivery address, and current total." confirmLabel={pending ? "Retry same submission safely" : "Place order"} cancelLabel="Back to checkout" confirmVariant="primary" size="wide" onCancel={() => setReview(null)} onConfirm={submit}>
       {frozen && <><dl className="order-detail-grid"><div><dt>Recipient</dt><dd>{frozen.form.firstName.trim()} {frozen.form.lastName.trim()}</dd></div><div><dt>Mobile</dt><dd>{normalizePhone(frozen.form.mobileNumber)}</dd></div><div><dt>Delivery address</dt><dd>{frozen.form.address}</dd></div><div><dt>Payment</dt><dd>Cash on delivery</dd></div>{frozen.form.note && <div><dt>Delivery note</dt><dd>{frozen.form.note}</dd></div>}</dl><OrderItemsList items={frozen.quote.items} label="Reviewed items" /><dl className="order-breakdown"><div><dt>Subtotal</dt><dd>{orderMoney(frozen.quote.subtotal)}</dd></div><div><dt>Discount{frozen.quote.couponCode ? ` (${frozen.quote.couponCode})` : ""}</dt><dd>−{orderMoney(frozen.quote.discount)}</dd></div><div><dt>Total to pay on delivery</dt><dd>{orderMoney(frozen.quote.total)}</dd></div></dl></>}
     </ConfirmModal>
   </div></div>;

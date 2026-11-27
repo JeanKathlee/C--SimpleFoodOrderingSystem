@@ -1,3 +1,4 @@
+import styles from "../../pages/Dashboard.module.css";
 const NAV_ITEMS = [
   { key: "dashboard", label: "Dashboard" },
   { key: "manage-orders", label: "Manage Orders" },
@@ -9,25 +10,23 @@ const NAV_ITEMS = [
 
 export default function AdminSidebar({ activeSection, onSectionChange, disabled = false }) {
   return (
-    <aside className="admin-sidebar">
-      <div className="admin-brand">
-        <span className="admin-brand-dot" aria-hidden="true" />
+    <aside className={styles["admin-sidebar"]}>
+      <div className={styles["admin-brand"]}>
+        <span className={styles["admin-brand-dot"]} aria-hidden="true" />
         <div>
-          <p className="admin-brand-title">FoodJS</p>
-          <p className="admin-brand-subtitle">Admin Features</p>
+          <p className={styles["admin-brand-title"]}>FoodJS</p>
+          <p className={styles["admin-brand-subtitle"]}>Admin Features</p>
         </div>
       </div>
 
-      <nav className="admin-nav">
+      <nav className={styles["admin-nav"]}>
         {NAV_ITEMS.map((item) => (
           <button
             key={item.key}
             type="button"
             aria-current={activeSection === item.key ? "page" : undefined}
             disabled={disabled}
-            className={`admin-nav-item ${
-              activeSection === item.key ? "active" : ""
-            }`}
+            className={[styles["admin-nav-item"], activeSection === item.key ? styles.active : ""].filter(Boolean).join(" ")}
             onClick={() => onSectionChange(item.key)}
           >
             {item.label}

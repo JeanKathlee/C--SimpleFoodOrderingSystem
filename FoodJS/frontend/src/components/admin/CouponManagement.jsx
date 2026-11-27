@@ -1,3 +1,5 @@
+import styles from "../../pages/Dashboard.module.css";
+import Button from "../ui/Button";
 import { useState } from "react";
 import Pagination from "../Pagination";
 import usePagination from "../../hooks/usePagination";
@@ -53,12 +55,12 @@ export default function CouponManagement({ coupons, onAddCoupon, onUpdateCoupon,
   };
 
   return (
-    <section className="admin-panel">
-      <div className="admin-panel-header">
+    <section className={styles["admin-panel"]}>
+      <div className={styles["admin-panel-header"]}>
         <h2>Coupon Management</h2>
       </div>
 
-      <form className="admin-form-grid" onSubmit={handleSubmit}>
+      <form className={styles["admin-form-grid"]} onSubmit={handleSubmit}>
         <input
           type="text"
           placeholder="Code (e.g., SAVE10)"
@@ -104,19 +106,19 @@ export default function CouponManagement({ coupons, onAddCoupon, onUpdateCoupon,
           min="-1"
         />
 
-        <div className="admin-form-actions">
-          <button type="submit" className="admin-btn admin-btn-primary">
+        <div className={styles["admin-form-actions"]}>
+          <Button variant="primary" type="submit" >
             {editId ? "Update Coupon" : "Add Coupon"}
-          </button>
+          </Button>
           {editId && (
-            <button type="button" className="admin-btn admin-btn-light" onClick={reset}>
+            <Button variant="light" type="button" onClick={reset}>
               Cancel
-            </button>
+            </Button>
           )}
         </div>
       </form>
 
-      <ul className="admin-category-list">
+      <ul className={styles["admin-category-list"]}>
         {pager.pageItems.map((coupon) => (
           <li key={coupon.id}>
             <div>
@@ -124,21 +126,21 @@ export default function CouponManagement({ coupons, onAddCoupon, onUpdateCoupon,
               <p>{coupon.description}</p>
               <span>Min: ₱{coupon.minOrderAmount} | Uses: {coupon.maxUses === -1 ? "∞" : coupon.usedCount + "/" + coupon.maxUses}</span>
             </div>
-            <div className="admin-item-actions">
-              <button
+            <div className={styles["admin-item-actions"]}>
+              <Button variant="light"
                 type="button"
-                className="admin-btn admin-btn-light"
+
                 onClick={() => handleEdit(coupon)}
               >
                 Edit
-              </button>
-              <button
+              </Button>
+              <Button variant="danger"
                 type="button"
-                className="admin-btn admin-btn-danger"
+
                 onClick={() => onDeleteCoupon(coupon.id)}
               >
                 Delete
-              </button>
+              </Button>
             </div>
           </li>
         ))}

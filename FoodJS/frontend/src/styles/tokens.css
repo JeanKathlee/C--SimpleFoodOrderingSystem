@@ -1,0 +1,21 @@
+/* Shared design values only. Component layout belongs in CSS Modules. */
+:root {
+  --orange-600: #ff8a00;
+  --orange-500: #ff9b2f;
+  --orange-400: #ffb86b;
+  --bg-100: #fff7f0;
+  --text-900: #2b2b2b;
+  --muted-600: #7a5636;
+  --card-shadow: 0 18px 40px rgba(43, 18, 6, 0.12);
+
+  --admin-bg: #f1f1f3;
+  --admin-bg-soft: #ededf0;
+  --admin-surface: #f5f5f7;
+  --admin-surface-warm: #fff7ef;
+  --admin-border: #e7e1dc;
+  --admin-text: #1a1a1a;
+  --admin-muted: #666;
+  --admin-primary: #ff8a00;
+  --admin-primary-strong: #f97316;
+  --admin-white: #ffffff;
+}

@@ -4,6 +4,24 @@ The React client for FoodJS. It includes the public landing page, customer order
 
 Run `npm run dev` for local development, `npm run lint` for static checks, and `npm run build` for a production bundle. API requests under `/api` are proxied to the ASP.NET Core backend at `http://localhost:3002` during development.
 
+## Styling: Dashboard migration pilot
+
+- `styles/tokens.css` holds shared color/theme values and is imported once in
+  `main.jsx`. Existing customer-page layout CSS remains in place for a later pass.
+- `pages/Dashboard.module.css` owns the admin layout, navigation, analytics, and
+  shared admin panel/table styles. Admin components import its scoped classes.
+- Menu Management, Category Management, Customers, and Order Management have
+  their own `.module.css` files for feature-specific styles and responsive rules.
+- `components/ui/Button.jsx` and `Modal.jsx` are reusable native-button and
+  accessible-dialog components with their own CSS Modules. Checkout and order
+  tracking share the same Modal without loading Dashboard styles.
+- Use CSS Module imports for new component layout. Do not add global admin
+  selectors or rely on a different page's stylesheet being loaded first.
+
+This is a styling refactor, not a redesign or a backend architecture change.
+Tests cover scoped class mappings, active/status styles, reusable UI contracts,
+customer-dialog composition, and existing pagination/upload behavior.
+
 ## List pagination and food uploads
 
 - Lists use the same Pagination component with 10, 20, or 50 records per page.

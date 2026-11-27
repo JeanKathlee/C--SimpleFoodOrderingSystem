@@ -1,3 +1,4 @@
+import styles from "../../pages/Dashboard.module.css";
 function formatCurrency(value) {
   return new Intl.NumberFormat("en-PH", {
     style: "currency",
@@ -8,11 +9,11 @@ function formatCurrency(value) {
 
 export default function PopularItems({ topItems }) {
   return (
-    <section className="admin-panel">
-      <div className="admin-panel-header">
+    <section className={styles["admin-panel"]}>
+      <div className={styles["admin-panel-header"]}>
         <h2>Top Selling Menu Items</h2>
       </div>
-      <ul className="admin-popular-list">
+      <ul className={styles["admin-popular-list"]}>
         {topItems.map((item, index) => (
           <li key={item.id}>
             <div>

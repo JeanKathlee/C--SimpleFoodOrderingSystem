@@ -36,7 +36,7 @@
 .category-editor-fields [aria-invalid="true"] { border-color: #b9322c; }
 .category-editor-error { display: block; margin-top: 6px; color: #a12b23; font-size: 13px; }
 .category-editor-actions { display: flex; justify-content: flex-end; flex-wrap: wrap; gap: 10px; margin-top: 24px; }
-.category-editor-dialog .admin-btn { min-height: 42px; }
+.category-editor-dialog [data-ui-button] { min-height: 42px; }
 .category-editor-dialog button:disabled { opacity: .6; cursor: wait; }
 .category-editor-status:empty { display: none; }
 .category-editor-status { display: block; margin-top: 10px; color: #7c5e4a; font-size: 13px; }

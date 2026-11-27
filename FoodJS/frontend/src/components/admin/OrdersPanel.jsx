@@ -1,3 +1,5 @@
+import styles from "../../pages/Dashboard.module.css";
+import Button from "../ui/Button";
 import Pagination from "../Pagination";
 import usePagination from "../../hooks/usePagination";
 
@@ -47,13 +49,13 @@ export default function OrdersPanel({
   const pager = usePagination(orders, 10, JSON.stringify(filters));
 
   return (
-    <section className="admin-panel">
-      <div className="admin-panel-header">
+    <section className={styles["admin-panel"]}>
+      <div className={styles["admin-panel-header"]}>
         <h2>{title}</h2>
       </div>
 
       {showFilters ? (
-        <div className="admin-order-filters">
+        <div className={styles["admin-order-filters"]}>
           <label>
             <span>From</span>
             <input
@@ -109,8 +111,8 @@ export default function OrdersPanel({
         </div>
       ) : null}
 
-      <div className="admin-table-wrap">
-        <table className="admin-table">
+      <div className={styles["admin-table-wrap"]}>
+        <table className={styles["admin-table"]}>
           <thead>
             <tr>
               <th>Order ID</th>
@@ -126,7 +128,7 @@ export default function OrdersPanel({
           <tbody>
             {orders.length === 0 ? (
               <tr>
-                <td colSpan={isAdmin ? 8 : 6} className="admin-empty-cell">
+                <td colSpan={isAdmin ? 8 : 6} className={styles["admin-empty-cell"]}>
                   No orders match the selected filters.
                 </td>
               </tr>
@@ -136,7 +138,7 @@ export default function OrdersPanel({
                   <td>{order.id}</td>
                   <td>{order.customerName}</td>
                   <td>
-                    <span className={`admin-status ${order.status.toLowerCase()}`}>
+                    <span className={[styles["admin-status"], styles[order.status.toLowerCase()]].filter(Boolean).join(" ")}>
                       {order.status}
                     </span>
                   </td>
@@ -181,14 +183,14 @@ export default function OrdersPanel({
                   )}
                   {isAdmin && (
                     <td>
-                      <button
+                      <Button variant="danger"
                         type="button"
-                        className="admin-btn admin-btn-danger admin-table-action"
+                        className={styles["admin-table-action"]}
                         onClick={() => onDeleteOrder && onDeleteOrder(order.id)}
                         aria-label={`Delete order ${order.id}`}
                       >
                         Delete
-                      </button>
+                      </Button>
                     </td>
                   )}
                 </tr>

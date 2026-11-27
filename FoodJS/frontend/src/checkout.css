@@ -38,6 +38,5 @@
 .checkout-revised .delivery-map-search-row input { min-width:0; }
 .checkout-revised button:disabled { opacity:.55; cursor:not-allowed; }
 .checkout-confirmation > .client-shell > .panel-card { margin:18px 0; padding:22px; }
-.admin-modal .admin-btn-primary { background:#d96e10; border-color:#d96e10; color:white; }
 @media(max-width:1000px) { .checkout-revised .checkout-grid { grid-template-columns:1fr; } }
 @media(max-width:600px) { .checkout-revised .panel-card { padding:17px; } .checkout-revised .checkout-name-row { grid-template-columns:1fr; } .checkout-revised input:not([type="radio"]), .checkout-revised textarea, .checkout-revised select { font-size:16px; } .checkout-summary-heading { flex-wrap:wrap; } .checkout-coupon-actions { flex-wrap:wrap; } .checkout-coupon-actions input { flex-basis:100%; } .checkout-revised .page-topbar, .checkout-confirmation .page-topbar { flex-direction:column; align-items:flex-start; gap:14px; } .checkout-revised .page-topbar .client-btn, .checkout-confirmation .page-topbar .client-btn { white-space:nowrap; } }

@@ -2,7 +2,7 @@ import { useEffect, useRef, useState } from "react";
 import { Link, useParams } from "react-router-dom";
 import { orderDate, orderRequest } from "../lib/orders";
 import OrderDetailsContent from "../components/OrderDetailsContent";
-import ConfirmModal from "../components/admin/ConfirmModal";
+import ConfirmModal from "../components/ui/Modal";
 import Pagination from "../components/Pagination";
 import usePagination from "../hooks/usePagination";
 import "../orders.css";

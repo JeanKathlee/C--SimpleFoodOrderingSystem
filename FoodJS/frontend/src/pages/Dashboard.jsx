@@ -1,3 +1,4 @@
+import styles from "./Dashboard.module.css";
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { clearAuthSession, getAuthSession } from "../lib/auth";
@@ -11,10 +12,10 @@ import MenuManagement from "../components/admin/MenuManagement";
 import CategoryManagement from "../components/admin/CategoryManagement";
 import CouponManagement from "../components/admin/CouponManagement";
 import PopularItems from "../components/admin/PopularItems";
-import ConfirmModal from "../components/admin/ConfirmModal";
+import ConfirmModal from "../components/ui/Modal";
 import CustomersPanel from "../components/admin/CustomersPanel";
 import { useNotification } from "../hooks/useNotification";
-import "../dashboard.css";
+
 
 const DEFAULT_STATUS_OPTIONS = ["Pending", "Preparing", "Ready", "Cancelled", "Delivered"];
 const DEFAULT_WEEKLY_REVENUE = [
@@ -111,7 +112,7 @@ function normalizeOrders(items = []) {
 function calculateSoldCounts(items = [], allOrders = []) {
   return items.map((item) => {
     let soldCount = 0;
-    
+
     allOrders.forEach((order) => {
       if (order.items && Array.isArray(order.items)) {
         order.items.forEach((orderItem) => {
@@ -121,7 +122,7 @@ function calculateSoldCounts(items = [], allOrders = []) {
         });
       }
     });
-    
+
     return {
       ...item,
       soldCount,
@@ -327,12 +328,12 @@ export default function Dashboard() {
 
   const dashboardStats = useMemo(() => {
     const statsData = filteredAdminOrders;
-    
+
     const completedOrders = statsData.filter((order) => order.status === "Delivered").length;
     const cancelledOrders = statsData.filter((order) => order.status === "Cancelled").length;
     const pendingOrders = statsData.filter((order) => order.status === "Pending").length;
     const preparingOrders = statsData.filter((order) => order.status === "Preparing").length;
-    
+
     const revenueTotal = statsData.reduce((sum, order) => {
       if (order.status === "Cancelled") return sum;
       return sum + order.total;
@@ -690,10 +691,10 @@ export default function Dashboard() {
   };
 
   return (
-    <div className={`admin-layout ${activeSection === "menu" || activeSection === "manage-orders" ? "admin-menu-view" : ""}`}>
+    <div className={[styles["admin-layout"], activeSection === "menu" || activeSection === "manage-orders" ? styles["admin-menu-view"] : ""].filter(Boolean).join(" ")}>
       <AdminSidebar activeSection={activeSection} onSectionChange={handleSectionChange} disabled={menuDraft.busy || orderBusy} />
 
-      <main className="admin-main">
+      <main className={styles["admin-main"]}>
         <AdminTopbar
           onLogout={handleLogout}
           adminName={session?.user?.name || "Admin"}
@@ -707,8 +708,8 @@ export default function Dashboard() {
           <>
             <AnalyticsCards stats={dashboardStats} topItems={topItems} />
 
-            <div className="admin-content-grid">
-              <RevenueChart 
+            <div className={styles["admin-content-grid"]}>
+              <RevenueChart
                 weeklyRevenue={weeklyRevenue}
                 orders={allOrders.length > 0 ? allOrders : filteredAdminOrders}
                 dateRange={filters}
