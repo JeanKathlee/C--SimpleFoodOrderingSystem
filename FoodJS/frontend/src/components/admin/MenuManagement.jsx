@@ -6,13 +6,15 @@ import Pagination from "../Pagination";
 import ConfirmModal from "../ui/Modal";
 import { formatPrice } from "../../lib/menuApi";
 import { checkImageFile, FOOD_IMAGE_MAX_BYTES } from "../../lib/imageUpload";
+import DrinkOptionsEditor from "./DrinkOptionsEditor";
+import { newDrinkOptions, drinkOptionsError, drinkOptionsPayload } from "../../lib/drinkOptions";
 
 const EMPTY_FORM = { name: "", description: "", categoryId: "", price: "", prepTime: "", isAvailable: true, image: null };
 const EMPTY_PAGE = { items: [], totalCount: 0, page: 1, pageSize: 10, totalPages: 1 };
 
 export default function MenuManagement({ categories, categoryLoading, categoryError, onRetryCategories,
   revision, onAddMenuItem, onUpdateMenuItem, onDeleteMenuItem, onSetAvailability, onDraftChange }) {
-  const [form, setForm] = useState({ ...EMPTY_FORM });
+  const [form, setForm] = useState({ ...EMPTY_FORM, includesDrink: false, drinkOptions: [] });
   const [editor, setEditor] = useState(null);
   const [errors, setErrors] = useState({});
   const [saveError, setSaveError] = useState("");
@@ -74,27 +76,23 @@ export default function MenuManagement({ categories, categoryLoading, categoryEr
     return () => { disposed = true; controller?.abort(); clearInterval(timer); };
   }, [query, revision, refresh]);
 
-  useEffect(() => {
-    if (editor) {
-      editorRef.current?.scrollIntoView({ behavior: "smooth", block: "start" });
-      nameRef.current?.focus({ preventScroll: true });
-    }
-  }, [editor]);
-
   const resetEditor = () => {
     imageReadId.current += 1;
     setEditor(null); setDirty(false); setErrors({}); setSaveError(""); setReadingImage(false);
-    setImageChanged(false); setForm({ ...EMPTY_FORM }); addRef.current?.focus();
+    setImageChanged(false); setForm({ ...EMPTY_FORM, includesDrink: false, drinkOptions: [] });
   };
   const guardDraft = action => {
     if (dirty) setDiscardAction(() => action);
     else action();
   };
+  const closeEditor = () => { if (!saving && !readingImage) guardDraft(resetEditor); };
   const openEditor = item => guardDraft(() => {
     imageReadId.current += 1;
     setForm(item ? { name: item.name, description: item.description || "", categoryId: item.categoryId,
-      price: String(item.price), prepTime: String(item.prepTime), isAvailable: item.isAvailable, image: item.image || null }
-      : { ...EMPTY_FORM, categoryId: categories[0]?.id || "" });
+      price: String(item.price), prepTime: String(item.prepTime), isAvailable: item.isAvailable, image: item.image || null,
+      includesDrink: !!item.drinkOptions?.length,
+      drinkOptions: (item.drinkOptions ?? []).map(option => ({ ...option, addOn: String(option.addOn) })) }
+      : { ...EMPTY_FORM, categoryId: categories[0]?.id || "", includesDrink: false, drinkOptions: [] });
     setEditor(item ? { id: item.id, name: item.name } : { id: null });
     setErrors({}); setSaveError(""); setImageChanged(false); setDirty(false); setReadingImage(false);
     if (fileRef.current) fileRef.current.value = "";
@@ -102,6 +100,12 @@ export default function MenuManagement({ categories, categoryLoading, categoryEr
   const update = (field, value) => {
     setForm(current => ({ ...current, [field]: value })); setDirty(true);
     setErrors(current => ({ ...current, [field]: undefined })); setSaveError("");
+  };
+  const toggleDrink = enabled => {
+    setForm(current => ({ ...current, includesDrink: enabled,
+      drinkOptions: enabled && !current.drinkOptions.length ? newDrinkOptions() : current.drinkOptions }));
+    setDirty(true); setSaveError("");
+    setErrors(current => ({ ...current, drinkOptions: undefined }));
   };
   const readImage = event => {
     const file = event.target.files[0];
@@ -132,6 +136,10 @@ export default function MenuManagement({ categories, categoryLoading, categoryEr
     if (!Number.isFinite(Number(form.price)) || Number(form.price) <= 0 || !/^\d+(\.\d{1,2})?$/.test(form.price)) nextErrors.price = "Enter a price greater than zero, with up to two decimal places.";
     if (!Number.isInteger(Number(form.prepTime)) || Number(form.prepTime) <= 0) nextErrors.prepTime = "Enter preparation time in whole minutes, greater than zero.";
     if (errors.image) nextErrors.image = errors.image;
+    const optionsError = form.includesDrink
+      ? (!form.drinkOptions.length ? "Add at least one included drink, or turn off Includes a drink." : drinkOptionsError(form.drinkOptions))
+      : null;
+    if (optionsError) nextErrors.drinkOptions = optionsError;
     setErrors(nextErrors);
     if (Object.keys(nextErrors).length) {
       editorRef.current?.querySelector(`[name="${Object.keys(nextErrors)[0]}"]`)?.focus(); return;
@@ -139,6 +147,7 @@ export default function MenuManagement({ categories, categoryLoading, categoryEr
     setSaving(true); setSaveError("");
     const payload = { name: form.name.trim(), description: form.description.trim(), categoryId: form.categoryId,
       price: Number(form.price), prepTime: Number(form.prepTime), isAvailable: form.isAvailable,
+      drinkOptions: form.includesDrink ? drinkOptionsPayload(form.drinkOptions) : [],
       ...(imageChanged ? { image: form.image || "" } : {}) };
     try {
       const result = editor.id ? await onUpdateMenuItem(editor.id, payload) : await onAddMenuItem(payload);
@@ -172,9 +181,10 @@ export default function MenuManagement({ categories, categoryLoading, categoryEr
         {categoryError && <Button variant="light" type="button" onClick={onRetryCategories}>Retry categories</Button>}
       </div>}
       {categoryLoading && <p className={styles["menu-hint"]} role="status">Loading categories…</p>}
-      {editor && <form ref={editorRef} className={styles["menu-editor"]} onSubmit={submit} noValidate aria-labelledby="menu-editor-title" aria-busy={saving}>
-        <div className={styles["menu-editor-heading"]}><div><h3 id="menu-editor-title">{editor.id ? `Edit ${editor.name}` : "Add a menu item"}</h3><p>Fields marked * are required.</p></div>
-          <Button variant="light" type="button" disabled={saving || readingImage} onClick={() => guardDraft(resetEditor)}>Cancel</Button></div>
+      {editor && <ConfirmModal open title={editor.id ? `Edit ${editor.name}` : "Add a menu item"} message="Fields marked * are required."
+        size="wide" hideCancel hideConfirm showClose closeLabel="Close menu item form" initialFocusRef={nameRef}
+        busy={saving || readingImage} onCancel={closeEditor}>
+      <form ref={editorRef} className={styles["menu-editor"]} onSubmit={submit} noValidate aria-label={editor.id ? "Edit menu item" : "Add menu item"} aria-busy={saving || readingImage}>
         <fieldset disabled={saving || readingImage} className={styles["menu-fields"]}>
           <div className={styles["menu-field"]}><label htmlFor="menu-name">Item name *</label>
             <input {...fieldProps("name")} ref={nameRef} required maxLength={120} autoComplete="off" placeholder="e.g. Classic cheeseburger" value={form.name} onChange={e => update("name", e.target.value)} />{errorFor("name")}</div>
@@ -194,12 +204,24 @@ export default function MenuManagement({ categories, categoryLoading, categoryEr
                 <p className={styles["menu-hint"]}>JPG, PNG, or WebP · Up to 5 MB{readingImage ? " · Reading image…" : ""}</p>
                 {form.image && <button type="button" className={styles["menu-text-button"]} onClick={() => { update("image", null); setImageChanged(true); if (fileRef.current) fileRef.current.value = ""; }}>Remove image</button>}
               </div></div>{errorFor("image")}</div>
+          <div className={styles["menu-field-wide"]}>
+            <label className={styles["menu-checkbox"]}><input id="menu-includesDrink" type="checkbox" checked={form.includesDrink}
+              aria-describedby="menu-includesDrink-hint" onChange={e => toggleDrink(e.target.checked)} />Includes a drink</label>
+            <p id="menu-includesDrink-hint" className={styles["menu-hint"]}>Enable for a meal or bundle with a drink. Leave off for standalone beverages, food, sides, or desserts.</p>
+          </div>
+          {form.includesDrink && <DrinkOptionsEditor options={form.drinkOptions} onChange={options => {
+            update("drinkOptions", options);
+            if (!options.length) setForm(current => ({ ...current, includesDrink: false }));
+          }} error={errors.drinkOptions} />}
           <label className={[styles["menu-checkbox"], styles["menu-field-wide"]].join(" ")}><input type="checkbox" checked={form.isAvailable} onChange={e => update("isAvailable", e.target.checked)} />Available for ordering</label>
         </fieldset>
         {saveError && <p className={styles["menu-error"]} role="alert">{saveError}</p>}
         <div className={styles["menu-editor-actions"]}><Button variant="primary" type="submit" disabled={saving || readingImage || categoryLoading || !categories.length}>
-          {saving ? "Saving…" : editor.id ? "Save changes" : "Add item"}</Button><span className={styles["menu-hint"]} aria-live="polite">{saving ? "Please wait. Your draft is being saved." : "Changes are saved only when you submit."}</span></div>
-      </form>}
+          {saving ? "Saving…" : editor.id ? "Save changes" : "Add item"}</Button>
+          <Button variant="light" type="button" disabled={saving || readingImage} onClick={closeEditor}>Cancel</Button>
+          <span className={styles["menu-hint"]} aria-live="polite">{saving ? "Please wait. Your draft is being saved." : "Changes are saved only when you submit."}</span></div>
+      </form>
+      </ConfirmModal>}
       <div className={styles["menu-toolbar"]}>
         <div className={styles["menu-field"]}><label htmlFor="menu-search">Search menu</label><input id="menu-search" type="search" maxLength={120} placeholder="Search name or description" value={search} onChange={e => setSearch(e.target.value)} /></div>
         <div className={styles["menu-field"]}><label htmlFor="menu-filter-category">Category</label><select id="menu-filter-category" value={query.categoryId} onChange={e => setFilter("categoryId", e.target.value)}>

@@ -1,6 +1,6 @@
 using FoodJS.Api.Contracts;
+using FoodJS.Api.Common;
 using System.Net.Http.Headers;
-using System.Security.Cryptography;
 using System.Text;
 using System.Text.Json;
 using FoodJS.Api.Repositories;
@@ -41,72 +41,6 @@ public sealed class AuthService(
 
         return await CreateSessionAsync(user, "Login successful.");
     }
-
-    public async Task<ForgotPasswordResponse> CreatePasswordResetAsync(string? email)
-    {
-        if (string.IsNullOrWhiteSpace(email)) throw new BadHttpRequestException("Email is required.");
-        email = email.Trim();
-        const string message = "If that email is registered, password-reset instructions are ready.";
-        var user = await FindByEmailAsync(email);
-        if (user is null)
-        {
-            return new ForgotPasswordResponse(message);
-        }
-
-        var previousTokens = await repository.UnusedResetTokensAsync(user.Id);
-        foreach (var previous in previousTokens)
-        {
-            previous.UsedAt = DateTimeOffset.UtcNow;
-        }
-
-        var token = Convert.ToHexString(RandomNumberGenerator.GetBytes(32));
-        repository.AddResetToken(new PasswordResetToken
-        {
-            UserId = user.Id,
-            TokenHash = HashResetToken(token),
-            ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(30)
-        });
-        await unitOfWork.SaveAsync();
-
-        // The classroom/local build has no mail provider. Expose the one-time token
-        // only in Development so the complete reset flow can be demonstrated.
-        return new ForgotPasswordResponse(
-            message,
-            environment.IsDevelopment() || environment.IsEnvironment("Testing") ? token : null);
-    }
-
-    public async Task<bool> ResetPasswordAsync(string? email, string? token, string? newPassword)
-    {
-        if (string.IsNullOrWhiteSpace(email) || string.IsNullOrWhiteSpace(token) || string.IsNullOrEmpty(newPassword))
-            throw new BadHttpRequestException("Email, reset token, and new password are required.");
-        email = email.Trim();
-        token = token.Trim();
-        if (newPassword.Length < 6)
-        {
-            throw new BadHttpRequestException("Password must be at least 6 characters.");
-        }
-
-        var user = await FindByEmailAsync(email);
-        if (user is null)
-        {
-            return false;
-        }
-
-        var tokenHash = HashResetToken(token);
-        var reset = await repository.FindResetTokenAsync(user.Id, tokenHash);
-        if (reset is null || reset.ExpiresAt <= DateTimeOffset.UtcNow)
-        {
-            return false;
-        }
-
-        user.PasswordHash = Hasher.HashPassword(user, newPassword);
-        reset.UsedAt = DateTimeOffset.UtcNow;
-        await unitOfWork.SaveAsync();
-        return true;
-    }
-
-    private static string HashResetToken(string token) =>
-        Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(token)));
 
     // if something goes wrong this throws an error with a message, the controller sends it back
     public async Task<AuthResponse> GoogleLoginAsync(string? code, string? redirectUri)
@@ -174,9 +108,18 @@ public sealed class AuthService(
                 LastName = googleUser.FamilyName ?? "User",
                 Email = googleUser.Email,
                 PasswordHash = "",
+                IsEmailVerified = true,
                 Role = await repository.GetRoleAsync(CustomerRole),
             };
             repository.Add(user);
+            await unitOfWork.SaveAsync();
+        }
+        else if (!user.IsEmailVerified)
+        {
+            // Do not activate a password an attacker may have pre-registered for this email.
+            if (user.PasswordHash != "")
+                throw new ApiException(403, "Verify your existing account's email before signing in with Google. You can resend the verification email.");
+            user.IsEmailVerified = true;
             await unitOfWork.SaveAsync();
         }
 
@@ -184,8 +127,12 @@ public sealed class AuthService(
     }
 
     // logs the user in: gives back a new token plus the user's info
-    public async Task<AuthResponse> CreateSessionAsync(User user, string message) =>
-        new(message, CreateToken(user), await ToResponseAsync(user));
+    public async Task<AuthResponse> CreateSessionAsync(User user, string message)
+    {
+        if (!user.IsEmailVerified)
+            throw new ApiException(403, "Verify your email before signing in. You can resend the verification email.");
+        return new(message, CreateToken(user), await ToResponseAsync(user));
+    }
 
     public async Task EnsureRolesAsync()
     {
@@ -228,6 +175,13 @@ public sealed class AuthService(
     {
         if (await repository.EmailExistsAsync(email, 0))
         {
+            // Only development's documented demo identities are explicitly exempted.
+            var existing = await repository.FindByEmailAsync(email);
+            if (environment.IsDevelopment() && existing is not null && existing.Role.Name == role && !existing.IsEmailVerified)
+            {
+                existing.IsEmailVerified = true;
+                await unitOfWork.SaveAsync();
+            }
             return;
         }
 
@@ -237,6 +191,7 @@ public sealed class AuthService(
             LastName = lastName,
             Email = email,
             PasswordHash = "",
+            IsEmailVerified = true,
             Role = await repository.GetRoleAsync(role),
         };
         user.PasswordHash = Hasher.HashPassword(user, password);
@@ -247,10 +202,10 @@ public sealed class AuthService(
     public Task<User?> FindByEmailAsync(string email) =>
         repository.FindByEmailAsync(email);
 
-    public async Task<bool> IsTokenAccountActiveAsync(int userId, string? tokenRole)
+    public async Task<bool> IsTokenAccountActiveAsync(int userId, string? tokenRole, int tokenVersion)
     {
         var user = await repository.FindAsync(userId);
-        return user is not null && user.Role.Name == tokenRole;
+        return user is not null && user.IsEmailVerified && user.Role.Name == tokenRole && user.AuthVersion == tokenVersion;
     }
 
     // makes the login token, it holds the user id, email, and role
@@ -261,6 +216,7 @@ public sealed class AuthService(
             ["sub"] = user.Id.ToString(),
             ["email"] = user.Email,
             ["role"] = user.Role.Name,
+            ["auth_version"] = user.AuthVersion,
         },
         Expires = DateTime.UtcNow.AddHours(1),
         SigningCredentials = new SigningCredentials(SigningKey(config), SecurityAlgorithms.HmacSha256),
@@ -286,6 +242,7 @@ public sealed class AuthService(
             user.ProfileImage ?? "",
             "",
             "",
-            user.CreatedAt);
+            user.CreatedAt,
+            user.IsEmailVerified);
     }
 }

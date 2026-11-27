@@ -31,7 +31,7 @@ public sealed class CartAndCategoryTests : IDisposable
             new User { FirstName = "B", LastName = "B", Email = "b@x.test", PasswordHash = "", Role = role });
         var burgers = new Category { Name = "Burgers", Description = "d" };
         db.Categories.AddRange(burgers, new Category { Name = "Empty", Description = "d" });
-        db.MenuItems.Add(new MenuItem { Name = "Burger", Price = 100, PrepTime = 5, Category = burgers });
+        db.MenuItems.Add(new MenuItem { Name = "Burger", Price = 100, PrepTime = 5, Category = burgers, DrinkOptionsJson = TestMealDrinks.Json });
         db.SaveChanges();
     }
 

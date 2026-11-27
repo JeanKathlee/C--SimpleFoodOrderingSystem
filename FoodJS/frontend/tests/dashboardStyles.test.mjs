@@ -13,7 +13,7 @@ before(async () => {
 after(async () => { await server?.close(); });
 
 const adminComponents = ["AdminSidebar", "AdminTopbar", "AnalyticsCards", "RevenueChart", "PopularItems",
-  "CategoryManagement", "CouponManagement", "CustomersPanel", "MenuManagement", "OrderManagement", "OrdersPanel"];
+  "CategoryManagement", "CouponManagement", "CustomersPanel", "MenuManagement", "DrinkOptionsEditor", "OrderManagement", "OrdersPanel"];
 
 test("every literal CSS Module lookup in the Dashboard family resolves", async () => {
   const urls = ["/src/pages/Dashboard.jsx", "/src/components/ui/Modal.jsx", "/src/components/ui/Button.jsx",

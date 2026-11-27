@@ -353,7 +353,8 @@ public sealed class OrderService(IOrderRepository orders, IMenuRepository menu, 
                     $"{item.Name} is currently unavailable.");
             }
 
-            var unitPrice = item.Price + ItemChoiceRules.GetAddOnPrice(choice);
+            var option = MenuDrinkOptionRules.Resolve(item, choice);
+            var unitPrice = item.Price + (option?.AddOn ?? 0m);
             lines.Add((item, choice, quantity, unitPrice, Math.Round(unitPrice * quantity, 2)));
         }
 
@@ -470,7 +471,6 @@ public sealed class OrderService(IOrderRepository orders, IMenuRepository menu, 
             }
 
             var choice = ItemChoiceRules.Normalize(item.SelectedChoice);
-            _ = ItemChoiceRules.GetAddOnPrice(choice);
             var key = (menuId, choice);
             var currentQuantity = merged.GetValueOrDefault(key);
             if (item.Quantity > int.MaxValue - currentQuantity)

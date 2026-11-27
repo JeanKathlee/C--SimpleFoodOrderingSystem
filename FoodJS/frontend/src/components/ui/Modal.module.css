@@ -1,6 +1,8 @@
 .backdrop { position:fixed; inset:0; background:rgba(21,10,5,.42); display:grid; place-items:center; padding:16px; z-index:100; }
 .dialog { width:min(420px,100%); max-height:85dvh; overflow-y:auto; background:#fffaf4; border:1px solid #e7ddd3; border-radius:16px; padding:20px; color:#332a24; }
 .dialog h3 { margin:0; font-size:18px; }
+.heading { display:flex; align-items:flex-start; justify-content:space-between; gap:16px; }
+.heading h3 { overflow-wrap:anywhere; }
 .dialog > p { margin:10px 0 16px; color:#715541; font-size:14px; line-height:1.6; }
 .actions { display:flex; justify-content:flex-end; gap:8px; margin-top:18px; }
 .dialog [data-ui-button] { border:1px solid #ddd2c5; min-height:42px; border-radius:8px; padding:8px 14px; font:inherit; font-size:13px; cursor:pointer; }

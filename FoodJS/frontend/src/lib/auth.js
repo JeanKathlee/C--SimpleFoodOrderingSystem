@@ -7,7 +7,8 @@ function tokenIsExpired(token) {
     const normalized = payloadPart.replace(/-/g, '+').replace(/_/g, '/');
     const padded = normalized.padEnd(Math.ceil(normalized.length / 4) * 4, '=');
     const payload = JSON.parse(atob(padded));
-    return typeof payload.exp !== 'number' || payload.exp * 1000 <= Date.now();
+    return typeof payload.exp !== 'number' || payload.exp * 1000 <= Date.now()
+      || !Number.isInteger(payload.auth_version) || payload.auth_version < 0;
   } catch {
     return true;
   }
@@ -25,7 +26,7 @@ export function getAuthSession() {
     }
 
     const session = JSON.parse(raw);
-    if (!session?.token || tokenIsExpired(session.token)) {
+    if (!session?.token || session.user?.isEmailVerified !== true || tokenIsExpired(session.token)) {
       localStorage.removeItem(AUTH_STORAGE_KEY);
       return null;
     }

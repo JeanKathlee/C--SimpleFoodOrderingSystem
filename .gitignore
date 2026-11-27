@@ -14,6 +14,10 @@ backend/.env
 *.db-wal
 .data-protection-keys/
 .legacy-backups/
+.demo-runtime/
+.qa-runtime/
+playwright-report/
+test-results/
 
 # Ignore logs
 npm-debug.log*

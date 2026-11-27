@@ -3,6 +3,7 @@ using FoodJS.Api.Contracts;
 using FoodJS.Api.Services;
 using Microsoft.AspNetCore.Authorization;
 using Microsoft.AspNetCore.Mvc;
+using Microsoft.AspNetCore.RateLimiting;
 
 namespace FoodJS.Api.Controllers;
 
@@ -17,6 +18,7 @@ public sealed class UsersController(UsersService usersService) : ControllerBase
     public async Task<IActionResult> GetAll() => Ok(await usersService.GetAllAsync());
 
     [HttpPost("register")]
+    [EnableRateLimiting("email-verification")]
     public Task<IActionResult> Register(RegisterRequest request) => SendErrorsBack(async () =>
         StatusCode(StatusCodes.Status201Created, await usersService.RegisterAsync(request)));
 

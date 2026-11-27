@@ -20,6 +20,9 @@ public class MenuItem : ISoftDeletable
 
     public string? Image { get; set; }
 
+    // Null/unconfigured and [] both mean standalone. Only explicit options include a drink.
+    public string? DrinkOptionsJson { get; set; }
+
     public int CategoryId { get; set; }
 
     public Category Category { get; set; } = null!;

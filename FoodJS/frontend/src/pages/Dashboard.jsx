@@ -77,6 +77,7 @@ function normalizeMenu(items = [], categories = []) {
       prepTime: Number(item.prepTime || 10),
       isAvailable: item.isAvailable !== false,
       soldCount: Number(item.soldCount || 0),
+      drinkOptions: item.drinkOptions ?? [],
       category: item.category || category?.name || "",
     };
   });

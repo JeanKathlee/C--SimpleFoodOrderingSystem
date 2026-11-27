@@ -3,6 +3,11 @@
     {
       "id": "M-1001",
       "name": "Double Smash Burger",
+      "drinkOptions": [
+        { "label": "Go Large Iced Tea", "addOn": 50 },
+        { "label": "Go Medium Iced Tea", "addOn": 45 },
+        { "label": "Go Regular Iced Tea", "addOn": 0 }
+      ],
       "description": "Two juicy beef patties with cheddar, pickles, onions, and our signature sauce.",
       "price": 179,
       "categoryId": "cat-burgers",
@@ -15,6 +20,11 @@
     {
       "id": "M-1002",
       "name": "Crispy Chicken Burger",
+      "drinkOptions": [
+        { "label": "Go Large Iced Tea", "addOn": 50 },
+        { "label": "Go Medium Iced Tea", "addOn": 45 },
+        { "label": "Go Regular Iced Tea", "addOn": 0 }
+      ],
       "description": "Golden chicken fillet with fresh slaw, house mayo, and crunchy pickles.",
       "price": 149,
       "categoryId": "cat-burgers",
@@ -27,6 +37,11 @@
     {
       "id": "M-1003",
       "name": "Classic Cheeseburger",
+      "drinkOptions": [
+        { "label": "Go Large Iced Tea", "addOn": 50 },
+        { "label": "Go Medium Iced Tea", "addOn": 45 },
+        { "label": "Go Regular Iced Tea", "addOn": 0 }
+      ],
       "description": "Flame-grilled beef, melted cheese, tomato, lettuce, and toasted brioche.",
       "price": 129,
       "categoryId": "cat-burgers",
@@ -39,6 +54,7 @@
     {
       "id": "M-2001",
       "name": "Sea Salt Fries",
+      "drinkOptions": [],
       "description": "Crisp golden potato fries finished with fine sea salt.",
       "price": 89,
       "categoryId": "cat-sides",
@@ -51,6 +67,7 @@
     {
       "id": "M-2002",
       "name": "Loaded Cheese Fries",
+      "drinkOptions": [],
       "description": "Crispy fries layered with cheese sauce, bacon, and spring onions.",
       "price": 159,
       "categoryId": "cat-sides",
@@ -63,6 +80,7 @@
     {
       "id": "M-3001",
       "name": "Classic Iced Cola",
+      "drinkOptions": [],
       "description": "Chilled sparkling cola served over crystal-clear ice.",
       "price": 59,
       "categoryId": "cat-drinks",
@@ -75,6 +93,7 @@
     {
       "id": "M-3002",
       "name": "Fresh Mango Shake",
+      "drinkOptions": [],
       "description": "Sweet Philippine mangoes blended with milk and ice until creamy.",
       "price": 99,
       "categoryId": "cat-drinks",
@@ -87,6 +106,7 @@
     {
       "id": "M-4001",
       "name": "Chocolate Fudge Cake",
+      "drinkOptions": [],
       "description": "Moist chocolate cake layered with rich, silky fudge frosting.",
       "price": 89,
       "categoryId": "cat-desserts",

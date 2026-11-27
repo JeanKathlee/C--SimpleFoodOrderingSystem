@@ -8,9 +8,13 @@ public sealed record GoogleCallbackRequest(string? Code, string? RedirectUri);
 
 public sealed record ForgotPasswordRequest(string? Email);
 
-public sealed record ForgotPasswordResponse(string Message, string? ResetToken = null);
+public sealed record ForgotPasswordResponse(string Message);
 
 public sealed record ResetPasswordRequest(string? Email, string? Token, string? NewPassword);
+
+public sealed record VerifyEmailRequest(string? Email, string? Token);
+public sealed record ResendVerificationRequest(string? Email);
+public sealed record RegistrationResponse(string Message, string Email, bool VerificationRequired, bool EmailSent);
 
 // same fields the old node api sent back, so the react app still works
 public sealed record AuthUserResponse(
@@ -26,7 +30,8 @@ public sealed record AuthUserResponse(
     string ProfileImage,
     string LastOrderAddress,
     string LastOrderMobileNumber,
-    DateTimeOffset CreatedAt);
+    DateTimeOffset CreatedAt,
+    bool IsEmailVerified);
 
 public sealed record AuthResponse(string Message, string Token, AuthUserResponse User);
 

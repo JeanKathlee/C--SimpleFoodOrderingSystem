@@ -35,7 +35,7 @@ public sealed class AssignedApiFlowTests : IAsyncLifetime
         var user = User("Customer", customerRole);
         var other = User("Other", customerRole);
         var category = new Category { Name = "Burgers" };
-        var menu = new MenuItem { Name = "Burger", Price = 100m, PrepTime = 10, Category = category };
+        var menu = new MenuItem { Name = "Burger", Price = 100m, PrepTime = 10, Category = category, DrinkOptionsJson = TestMealDrinks.Json };
         db.AddRange(adminUser, user, other, menu, new Coupon
         {
             Code = "SAVE10", Discount = 10m, DiscountType = "percentage",
@@ -606,7 +606,7 @@ public sealed class AssignedApiFlowTests : IAsyncLifetime
     private object OrderRequest() => new
     {
         customerName = "Recipient", mobileNumber = "09990000000", address = "Delivery address, Manila",
-        items = new[] { new { menuItemId = PublicId.Menu(menuId), quantity = 1 } }
+        items = new[] { new { menuItemId = PublicId.Menu(menuId), quantity = 1, selectedChoice = "Go Regular Iced Tea" } }
     };
 
     private async Task<OrderResponse> CreateOrder() =>

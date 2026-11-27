@@ -41,6 +41,11 @@ public sealed class SoftDeletePersistenceTests : IAsyncLifetime
         db.CheckoutSubmissions.Add(submission);
         await db.SaveChangesAsync();
         records.Add(submission);
+        var verification = new EmailVerificationToken { User = user, Email = user.Email, TokenHash = "verification-hash",
+            CreatedAt = DateTimeOffset.UtcNow, ExpiresAt = DateTimeOffset.UtcNow.AddMinutes(30) };
+        db.EmailVerificationTokens.Add(verification);
+        await db.SaveChangesAsync();
+        records.Add(verification);
     }
 
     [Fact]
@@ -83,10 +88,11 @@ public sealed class SoftDeletePersistenceTests : IAsyncLifetime
         var oldColumns = await db.Database.SqlQueryRaw<string>("SELECT name AS Value FROM pragma_table_info('Users')").ToListAsync();
         Assert.DoesNotContain("IsDeleted", oldColumns);
         await migrator.MigrateAsync();
-        foreach (var record in records)
+        foreach (var record in records.Where(record => record is not EmailVerificationToken))
         {
             Assert.Equal(1L, await StoredCountAsync(record, false));
         }
+        Assert.Empty(await db.EmailVerificationTokens.ToListAsync());
         Assert.False(db.Database.HasPendingModelChanges());
     }
 

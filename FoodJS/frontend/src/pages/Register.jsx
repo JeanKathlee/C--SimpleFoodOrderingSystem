@@ -2,8 +2,9 @@ import { Link } from "react-router-dom";
 import { motion as Motion } from "framer-motion";
 import { useNavigate } from "react-router-dom";
 import { useState, useEffect } from "react";
-import { saveAuthSession, isAuthenticated, getAuthSession } from "../lib/auth";
-import { startGoogleAuth } from "../lib/googleAuth";
+import { isAuthenticated, getAuthSession } from "../lib/auth";
+import { registerForVerification, verificationPath } from "../lib/emailVerification";
+import { googleAuthEnabled, startGoogleAuth } from "../lib/googleAuth";
 import logo from "../../assets/logo.png";
 
 export default function Register() {
@@ -40,30 +41,15 @@ export default function Register() {
     setLoading(true);
 
     try {
-      const response = await fetch("/api/users/register", {
-        method: "POST",
-        headers: {
-          "Content-Type": "application/json",
-        },
-        body: JSON.stringify({
+      const payload = await registerForVerification({
           firstName,
           lastName,
           email,
           password,
-        }),
       });
-
-      const payload = await response.json();
-
-      if (!response.ok) {
-        setError(payload?.message || "Unable to register right now.");
-        return;
-      }
-
-      saveAuthSession({ token: payload.token, user: payload.user });
-      navigate("/menu", { replace: true });
-    } catch (_networkError) {
-      setError("Cannot connect to server. Please try again.");
+      navigate("/verify-email", { replace: true, state: { email: payload.email, message: payload.message } });
+    } catch (failure) {
+      setError(failure.message || "Cannot connect to server. Please try again.");
     } finally {
       setLoading(false);
     }
@@ -144,6 +130,7 @@ export default function Register() {
         </div>
 
         {error && <p className="form-error">{error}</p>}
+        {error && <p className="text"><Link to={verificationPath(email)} className="link">Already registered? Verify email / Resend link</Link></p>}
 
         <button className="btn-primary" type="submit" disabled={loading}>
           {loading ? "Creating Account..." : "Sign-up"}
@@ -153,9 +140,10 @@ export default function Register() {
           type="button"
           className="btn-primary"
           onClick={startGoogleAuth}
+          disabled={!googleAuthEnabled}
           style={{ backgroundColor: "#4285F4" }}
         >
-          Sign-up with Google
+          {googleAuthEnabled ? "Sign-up with Google" : "Google sign-up unavailable in phone demo"}
         </button>
 
         <p className="text">

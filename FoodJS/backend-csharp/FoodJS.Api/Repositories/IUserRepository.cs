@@ -12,9 +12,14 @@ public interface IUserRepository
     Task<string[]> AddressLinesAsync(int userId);
     Task<Address?> DefaultAddressAsync(int userId);
     Task<List<PasswordResetToken>> UnusedResetTokensAsync(int userId);
+    Task<PasswordResetToken?> LatestResetTokenAsync(int userId);
     Task<PasswordResetToken?> FindResetTokenAsync(int userId, string hash);
+    Task<List<EmailVerificationToken>> UnusedVerificationTokensAsync(int userId);
+    Task<EmailVerificationToken?> LatestVerificationTokenAsync(int userId);
+    Task<EmailVerificationToken?> FindVerificationTokenAsync(string hash);
     void Add(User user);
     void AddRole(Role role);
     void AddAddress(Address address);
     void AddResetToken(PasswordResetToken token);
+    void AddVerificationToken(EmailVerificationToken token);
 }

@@ -37,6 +37,7 @@ public sealed class OrderChoiceIntegrationTests : IAsyncLifetime
         var item = new MenuItem
         {
             Name = "Burger", Price = 100m, PrepTime = 10,
+            DrinkOptionsJson = TestMealDrinks.Json,
             Category = new Category { Name = "Burgers" }
         };
         db.AddRange(user, item);
@@ -116,8 +117,6 @@ public sealed class OrderChoiceIntegrationTests : IAsyncLifetime
     }
 
     [Theory]
-    [InlineData(null)]
-    [InlineData("")]
     [InlineData("Go Regular Iced Tea")]
     public async Task No_upgrade_keeps_the_base_price(string? choice)
     {

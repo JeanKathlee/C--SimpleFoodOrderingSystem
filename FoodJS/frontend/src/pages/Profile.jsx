@@ -1,7 +1,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import DeliveryMapPicker from "../components/DeliveryMapPicker";
-import { getAuthSession, saveAuthSession } from "../lib/auth";
+import { getAuthSession, saveAuthSession, clearAuthSession } from "../lib/auth";
 import { useNotification } from "../hooks/useNotification";
 import { IMAGE_ACCEPT, checkImageFile } from "../lib/imageUpload";
 import Pagination from "../components/Pagination";
@@ -149,6 +149,12 @@ export default function Profile() {
         return;
       }
 
+      if (payload.isEmailVerified === false) {
+        clearAuthSession();
+        navigate("/verify-email", { replace: true, state: { email: payload.email,
+          message: "Your email changed. Verify the new address before signing in again. You can resend the link below." } });
+        return;
+      }
       saveAuthSession({ token, user: payload });
       setSavedAddresses(Array.isArray(payload.addressBook) ? payload.addressBook : []);
       success("Profile updated successfully.");

@@ -30,7 +30,11 @@ public sealed record MenuItemResponse(
     int SoldCount,
     string? Image,
     DateTimeOffset CreatedAt,
-    DateTimeOffset UpdatedAt);
+    DateTimeOffset UpdatedAt,
+    IReadOnlyList<DrinkOptionResponse> DrinkOptions);
+
+public sealed record DrinkOptionResponse(string Label, decimal AddOn);
+public sealed record SaveDrinkOptionRequest(string? Label, decimal? AddOn);
 
 // The shape of the request body for creating or updating a menu item. All fields are optional to allow partial updates.
 public sealed class SaveMenuItemRequest
@@ -50,6 +54,11 @@ public sealed class SaveMenuItemRequest
     public string? Image { get; init; }
 
     public string? Description { get; init; }
+
+    // Omit to preserve options on update; omitted on create defaults to standalone.
+    // [] explicitly disables drink choices for this item.
+    // Exactly one option must cost 0 (included) when choices are configured.
+    public List<SaveDrinkOptionRequest?>? DrinkOptions { get; init; }
 }
 
 public sealed class SetAvailabilityRequest

@@ -23,4 +23,9 @@ public class User : ISoftDeletable
     public DateTimeOffset CreatedAt { get; set; } = DateTimeOffset.UtcNow;
 
     public bool IsDeleted { get; set; }
+
+    public bool IsEmailVerified { get; set; }
+
+    // Increment when an identity changes so previously-issued JWTs stay revoked.
+    public int AuthVersion { get; set; }
 }

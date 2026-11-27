@@ -3,7 +3,7 @@ import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
 import { motion as Motion } from "framer-motion";
 import { getAuthSession, isAuthenticated, saveAuthSession } from "../lib/auth";
-import { startGoogleAuth } from "../lib/googleAuth";
+import { googleAuthEnabled, startGoogleAuth } from "../lib/googleAuth";
 import logo from "../../assets/logo.png";
 
 function getRoleRoute(role) {
@@ -146,11 +146,12 @@ export default function Login() {
           className="btn-secondary"
           type="button"
           onClick={startGoogleAuth}
+          disabled={!googleAuthEnabled}
           initial={{ opacity: 0, y: 10 }}
           animate={{ opacity: 1, y: 0 }}
           transition={{ delay: 0.5, duration: 0.4 }}
         >
-          Login with Google
+          {googleAuthEnabled ? "Login with Google" : "Google sign-in unavailable in phone demo"}
         </Motion.button>
 
         <Motion.p 

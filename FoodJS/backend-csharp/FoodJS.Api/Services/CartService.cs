@@ -28,21 +28,15 @@ public sealed class CartService(ICartRepository repository, IUnitOfWorkRepositor
             throw QuantityError();
         }
 
-        if (string.IsNullOrWhiteSpace(request.SelectedChoice))
-        {
-            throw new ApiException(400, "A drink choice is required.");
-        }
-
-        if (!CartOptionPricing.TryResolve(request.SelectedChoice, out var selectedChoice, out var addOn))
-        {
-            throw new ApiException(400, "Invalid selectedChoice.");
-        }
-
         var menuItem = await repository.FindAvailableMenuAsync(menuItemId, ct);
         if (menuItem is null)
         {
             throw new ApiException(404, "Menu item not found or unavailable.");
         }
+
+        var option = MenuDrinkOptionRules.Resolve(menuItem, request.SelectedChoice);
+        var selectedChoice = option?.Label;
+        var addOn = option?.AddOn ?? 0m;
 
         var cart = await repository.FindCartAsync(userId, ct);
         if (cart is null)
@@ -54,7 +48,7 @@ public sealed class CartService(ICartRepository repository, IUnitOfWorkRepositor
         CartItem? existing = null;
         if (cart.Id != 0)
         {
-            existing = await repository.FindMatchingAsync(cart.Id, menuItemId, selectedChoice!, ct);
+            existing = await repository.FindMatchingAsync(cart.Id, menuItemId, selectedChoice, ct);
         }
 
         var unitPrice = decimal.Round(menuItem.Price + addOn, 2);

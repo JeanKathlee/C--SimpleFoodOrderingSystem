@@ -51,6 +51,7 @@ public sealed class CartControllerTests : IDisposable
             new MenuItem
             {
                 Name = "Burger Meal",
+                DrinkOptionsJson = TestMealDrinks.Json,
                 Price = 100m,
                 PrepTime = 10,
                 IsAvailable = true,

@@ -24,7 +24,6 @@ export default function Menu() {
   const [loading, setLoading] = useState(true);
   const [showBag, setShowBag] = useState(false);
   const [showAccountMenu, setShowAccountMenu] = useState(false);
-  const bagPager = usePagination(cartItems);
 
   // Load sa menu and cart
   useEffect(() => {
@@ -225,6 +224,8 @@ export default function Menu() {
               <button
                 type="button"
                 className="client-btn ghost"
+                aria-expanded={showBag}
+                aria-controls="menu-bag"
                 onClick={() => setShowBag((prev) => !prev)}
               >
                 My Bag ({cartCount})
@@ -302,7 +303,7 @@ export default function Menu() {
           </header>
 
           {showBag && (
-            <div className="menu-bag-dropdown">
+            <div className="menu-bag-dropdown" id="menu-bag">
               <div className="menu-bag-header">
                 <div>
                   <h2>My Bag</h2>
@@ -326,8 +327,8 @@ export default function Menu() {
                 </div>
               ) : (
                 <>
-                  <div className="menu-bag-list">
-                    {bagPager.pageItems.map((item) => (
+                  <div className="menu-bag-list" role="region" aria-label="Bag items" tabIndex={0}>
+                    {cartItems.map((item) => (
                       <div key={cartItemKey(item)} className="menu-bag-item">
                         <div>
                           <h3>{item.name}</h3>
@@ -350,7 +351,6 @@ export default function Menu() {
                     ))}
                   </div>
 
-                  <Pagination {...bagPager} label="Bag lines" />
                   <div className="menu-bag-total">
                     <div>
                       <span>Subtotal</span>

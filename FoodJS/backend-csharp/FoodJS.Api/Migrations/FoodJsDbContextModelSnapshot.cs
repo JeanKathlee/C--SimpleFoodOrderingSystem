@@ -204,6 +204,47 @@ namespace FoodJS.Api.Migrations
                     b.ToTable("Coupons");
                 });
 
+            modelBuilder.Entity("FoodJS.Api.Models.EmailVerificationToken", b =>
+                {
+                    b.Property<int>("Id")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER");
+
+                    b.Property<DateTimeOffset>("CreatedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("Email")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset>("ExpiresAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<bool>("IsDeleted")
+                        .ValueGeneratedOnAdd()
+                        .HasColumnType("INTEGER")
+                        .HasDefaultValue(false);
+
+                    b.Property<string>("TokenHash")
+                        .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<DateTimeOffset?>("UsedAt")
+                        .HasColumnType("TEXT");
+
+                    b.Property<int>("UserId")
+                        .HasColumnType("INTEGER");
+
+                    b.HasKey("Id");
+
+                    b.HasIndex("TokenHash")
+                        .IsUnique();
+
+                    b.HasIndex("UserId");
+
+                    b.ToTable("EmailVerificationTokens");
+                });
+
             modelBuilder.Entity("FoodJS.Api.Models.MenuItem", b =>
                 {
                     b.Property<int>("Id")
@@ -221,6 +262,9 @@ namespace FoodJS.Api.Migrations
 
                     b.Property<string>("Description")
                         .IsRequired()
+                        .HasColumnType("TEXT");
+
+                    b.Property<string>("DrinkOptionsJson")
                         .HasColumnType("TEXT");
 
                     b.Property<string>("Image")
@@ -590,6 +634,9 @@ namespace FoodJS.Api.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER");
 
+                    b.Property<int>("AuthVersion")
+                        .HasColumnType("INTEGER");
+
                     b.Property<DateTimeOffset>("CreatedAt")
                         .HasColumnType("TEXT");
 
@@ -605,6 +652,9 @@ namespace FoodJS.Api.Migrations
                         .ValueGeneratedOnAdd()
                         .HasColumnType("INTEGER")
                         .HasDefaultValue(false);
+
+                    b.Property<bool>("IsEmailVerified")
+                        .HasColumnType("INTEGER");
 
                     b.Property<string>("LastName")
                         .IsRequired()
@@ -658,6 +708,17 @@ namespace FoodJS.Api.Migrations
                     b.Navigation("MenuItem");
 
                     b.Navigation("ShoppingCart");
+                });
+
+            modelBuilder.Entity("FoodJS.Api.Models.EmailVerificationToken", b =>
+                {
+                    b.HasOne("FoodJS.Api.Models.User", "User")
+                        .WithMany()
+                        .HasForeignKey("UserId")
+                        .OnDelete(DeleteBehavior.Restrict)
+                        .IsRequired();
+
+                    b.Navigation("User");
                 });
 
             modelBuilder.Entity("FoodJS.Api.Models.MenuItem", b =>

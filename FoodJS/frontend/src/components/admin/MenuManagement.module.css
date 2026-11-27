@@ -5,7 +5,7 @@
 .menu-heading p, .menu-editor-heading p { color: #73675f; font-size: 13px; margin: 4px 0 0; }
 .menu-management [data-ui-button] { min-height: 42px; font-size: 13px; white-space: nowrap; }
 .menu-management [data-ui-button]:disabled { opacity: .55; cursor: not-allowed; transform: none; }
-.menu-editor { border: 1px solid #eed7bd; background: #fff9f2; border-radius: 14px; padding: 22px; margin-bottom: 26px; scroll-margin-top: 16px; }
+.menu-editor { min-width: 0; margin: 0; }
 .menu-editor-heading h3 { font-size: 17px; overflow-wrap: anywhere; }
 .menu-fields { border: 0; min-width: 0; padding: 0; margin: 0; display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 18px; }
 .menu-field { display: flex; flex-direction: column; gap: 7px; min-width: 0; }
@@ -27,7 +27,12 @@
 .menu-image-preview { width: 80px; height: 80px; object-fit: cover; border-radius: 9px; border: 1px solid #e6ddd3; }
 .menu-checkbox { display: flex; align-items: center; gap: 10px; font-size: 13px; color: #443a32; }
 .menu-checkbox input { width: 18px; height: 18px; accent-color: #e27612; }
-.menu-editor-actions { display: flex; align-items: center; gap: 14px; margin-top: 20px; padding-top: 18px; border-top: 1px solid #eadfce; }
+.menu-drink-options { border: 1px solid #eadfce; border-radius: 10px; padding: 16px; min-width: 0; }
+.menu-drink-options legend { font-size: 14px; font-weight: 600; padding: 0 6px; }
+.menu-drink-options > p { margin: 0 0 12px; }
+.menu-drink-row { display: grid; grid-template-columns: minmax(120px, 2fr) minmax(100px, 1fr) auto auto; gap: 12px; align-items: end; margin-bottom: 14px; }
+.menu-drink-row .menu-checkbox { min-height: 44px; }
+.menu-editor-actions { position: sticky; bottom: -20px; display: flex; flex-wrap: wrap; align-items: center; gap: 14px; margin-top: 20px; padding: 18px 0 4px; border-top: 1px solid #eadfce; background: #fffaf4; }
 .menu-text-button { border: 0; padding: 6px 0; background: transparent; color: #9d4c0a; text-decoration: underline; text-underline-offset: 3px; font: inherit; font-size: 13px; cursor: pointer; }
 .menu-management .menu-toolbar { display: grid; grid-template-columns: minmax(150px, 2fr) minmax(130px, 1fr) minmax(130px, 1fr) auto; gap: 14px; align-items: end; margin-bottom: 18px; }
 .menu-notice { display: flex; align-items: center; justify-content: space-between; gap: 16px; background: #fff3df; border: 1px solid #ead3a9; color: #735019; border-radius: 10px; padding: 14px; margin-bottom: 16px; font-size: 13px; }
@@ -54,7 +59,7 @@
   .menu-heading { flex-wrap: wrap; gap: 12px; }
   .menu-heading h2 { font-size: 18px; }
   .menu-fields { grid-template-columns: 1fr; gap: 16px; }
-  .menu-editor { padding: 16px; }
+  .menu-drink-row { grid-template-columns: 1fr 1fr; }
   .menu-editor-heading { gap: 10px; }
   .menu-editor-heading h3 { font-size: 15px; }
   .menu-management .menu-toolbar { grid-template-columns: 1fr 1fr; gap: 12px; }

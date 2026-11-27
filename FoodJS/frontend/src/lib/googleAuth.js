@@ -1,4 +1,6 @@
 const GOOGLE_STATE_KEY = "foodjs_google_oauth_state";
+// The isolated phone demo has no OAuth credentials or registered public callback.
+export const googleAuthEnabled = import.meta.env.VITE_DISABLE_GOOGLE_AUTH !== "true";
 const DEFAULT_GOOGLE_CLIENT_ID =
   "383406826534-8al6042a0n42itk48fpis06m0r81ip8k.apps.googleusercontent.com";
 

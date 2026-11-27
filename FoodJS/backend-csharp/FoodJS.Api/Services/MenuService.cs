@@ -58,6 +58,7 @@ public sealed class MenuService(IMenuRepository menuRepository, IReferenceDataRe
         SaveMenuItemRequest request, int? adminId, CancellationToken ct = default)
     {
         var input = Validate(request);
+        var drinkOptions = MenuDrinkOptionRules.ValidateAndSerialize(request.DrinkOptions ?? []);
         var category = await FindCategoryAsync(input.CategoryId, ct);
         var now = DateTimeOffset.UtcNow;
 
@@ -69,6 +70,7 @@ public sealed class MenuService(IMenuRepository menuRepository, IReferenceDataRe
             PrepTime = input.PrepTime,
             IsAvailable = request.IsAvailable != false,
             Image = NormalizeImage(request.Image),
+            DrinkOptionsJson = drinkOptions,
             CategoryId = category.Id,
             Category = category,
             CreatedByAdminId = await ResolveAdminIdAsync(adminId, ct),
@@ -92,6 +94,7 @@ public sealed class MenuService(IMenuRepository menuRepository, IReferenceDataRe
         }
 
         var input = Validate(request);
+        var drinkOptions = request.DrinkOptions is null ? item.DrinkOptionsJson ?? "[]" : MenuDrinkOptionRules.ValidateAndSerialize(request.DrinkOptions);
         var category = await FindCategoryAsync(input.CategoryId, ct);
 
         item.Name = input.Name;
@@ -101,6 +104,7 @@ public sealed class MenuService(IMenuRepository menuRepository, IReferenceDataRe
         item.IsAvailable = request.IsAvailable ?? item.IsAvailable;
         item.CategoryId = category.Id;
         item.Category = category;
+        item.DrinkOptionsJson = drinkOptions;
         if (request.Image is not null)
         {
             item.Image = NormalizeImage(request.Image);
@@ -225,7 +229,8 @@ public sealed class MenuService(IMenuRepository menuRepository, IReferenceDataRe
         item.SoldCount,
         item.Image,
         item.CreatedAt,
-        item.UpdatedAt);
+        item.UpdatedAt,
+        MenuDrinkOptionRules.GetOptions(item));
 
     // first run only: copies the old node menu (Data/Seed/*.json) into the database
     public async Task SeedDevelopmentDataAsync(string contentRoot, CancellationToken ct = default)
@@ -261,6 +266,7 @@ public sealed class MenuService(IMenuRepository menuRepository, IReferenceDataRe
                 SoldCount = m.SoldCount,
                 Image = m.Image,
                 Category = categoryById[m.CategoryId],
+                DrinkOptionsJson = MenuDrinkOptionRules.ValidateAndSerialize(m.DrinkOptions ?? []),
             });
         }
         await unitOfWork.SaveAsync(ct);
@@ -275,5 +281,5 @@ public sealed class MenuService(IMenuRepository menuRepository, IReferenceDataRe
     private sealed record SeedFile(List<SeedCategory>? Categories, List<SeedMenuItem>? Menu);
     private sealed record SeedCategory(string Id, string Name, string? Description);
     private sealed record SeedMenuItem(string Name, string? Description, decimal Price, string CategoryId,
-        int PrepTime, bool IsAvailable, int SoldCount, string? Image);
+        int PrepTime, bool IsAvailable, int SoldCount, string? Image, List<SaveDrinkOptionRequest?>? DrinkOptions);
 }

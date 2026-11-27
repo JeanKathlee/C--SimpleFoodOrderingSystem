@@ -34,14 +34,18 @@ public sealed class AuthFlowTests : IAsyncLifetime
             password = "initial-password"
         });
         Assert.Equal(HttpStatusCode.Created, registered.StatusCode);
-        Assert.False(string.IsNullOrWhiteSpace((await Json(registered)).GetProperty("token").GetString()));
+        Assert.False((await Json(registered)).TryGetProperty("token", out _));
+        Assert.Equal(HttpStatusCode.Forbidden, (await Login(email, "initial-password")).StatusCode);
+        Assert.Equal(HttpStatusCode.OK, (await factory.ConfirmEmailAsync(client, email)).StatusCode);
 
         Assert.Equal(HttpStatusCode.OK, (await Login(email, "initial-password")).StatusCode);
         Assert.Equal(HttpStatusCode.Unauthorized, (await Login(email, "wrong-password")).StatusCode);
 
         var forgot = await client.PostAsJsonAsync("/api/auth/forgot-password", new { email });
         Assert.Equal(HttpStatusCode.OK, forgot.StatusCode);
-        var resetToken = (await Json(forgot)).GetProperty("resetToken").GetString();
+        Assert.False((await Json(forgot)).TryGetProperty("resetToken", out _));
+        var resetToken = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(
+            factory.Emails.PasswordResets.Last().Link.Fragment.TrimStart('#'))["token"].ToString();
         Assert.False(string.IsNullOrWhiteSpace(resetToken));
 
         var resetBody = new { email, token = resetToken, newPassword = "new-password" };

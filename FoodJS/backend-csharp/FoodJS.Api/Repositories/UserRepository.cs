@@ -14,9 +14,18 @@ public sealed class UserRepository(FoodJsDbContext db) : IUserRepository
     public Task<string[]> AddressLinesAsync(int userId) => db.Addresses.Where(a => a.UserId == userId).OrderByDescending(a => a.IsDefault).Select(a => a.AddressLine1).ToArrayAsync();
     public Task<Address?> DefaultAddressAsync(int userId) => db.Addresses.FirstOrDefaultAsync(a => a.UserId == userId && a.IsDefault);
     public Task<List<PasswordResetToken>> UnusedResetTokensAsync(int userId) => db.PasswordResetTokens.Where(t => t.UserId == userId && t.UsedAt == null).ToListAsync();
+    public Task<PasswordResetToken?> LatestResetTokenAsync(int userId) =>
+        db.PasswordResetTokens.Where(t => t.UserId == userId).OrderByDescending(t => t.Id).FirstOrDefaultAsync();
     public Task<PasswordResetToken?> FindResetTokenAsync(int userId, string hash) => db.PasswordResetTokens.FirstOrDefaultAsync(t => t.UserId == userId && t.TokenHash == hash && t.UsedAt == null);
     public void Add(User user) => db.Users.Add(user);
     public void AddRole(Role role) => db.Roles.Add(role);
     public void AddAddress(Address address) => db.Addresses.Add(address);
     public void AddResetToken(PasswordResetToken token) => db.PasswordResetTokens.Add(token);
+    public Task<List<EmailVerificationToken>> UnusedVerificationTokensAsync(int userId) =>
+        db.EmailVerificationTokens.Where(t => t.UserId == userId && t.UsedAt == null).ToListAsync();
+    public Task<EmailVerificationToken?> LatestVerificationTokenAsync(int userId) =>
+        db.EmailVerificationTokens.Where(t => t.UserId == userId).OrderByDescending(t => t.Id).FirstOrDefaultAsync();
+    public Task<EmailVerificationToken?> FindVerificationTokenAsync(string hash) =>
+        db.EmailVerificationTokens.Include(t => t.User).ThenInclude(u => u.Role).FirstOrDefaultAsync(t => t.TokenHash == hash);
+    public void AddVerificationToken(EmailVerificationToken token) => db.EmailVerificationTokens.Add(token);
 }

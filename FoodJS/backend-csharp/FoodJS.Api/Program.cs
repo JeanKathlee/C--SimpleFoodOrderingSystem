@@ -7,6 +7,7 @@ using Microsoft.AspNetCore.Mvc;
 using Microsoft.EntityFrameworkCore;
 using System.Text.Json;
 using Microsoft.AspNetCore.DataProtection;
+using System.Threading.RateLimiting;
 
 var builder = WebApplication.CreateBuilder(args);
 builder.Services.AddAuthentication();
@@ -95,6 +96,22 @@ builder.Services.AddScoped<ICouponService, CouponService>();
 builder.Services.AddHttpClient();
 builder.Services.AddScoped<AuthService>();
 builder.Services.AddScoped<UsersService>();
+builder.Services.AddScoped<EmailVerificationService>();
+builder.Services.AddScoped<PasswordResetService>();
+builder.Services.AddScoped<IEmailService, SmtpEmailService>();
+builder.Services.AddSingleton<TimeProvider>(TimeProvider.System);
+builder.Services.AddRateLimiter(options =>
+{
+    options.RejectionStatusCode = StatusCodes.Status429TooManyRequests;
+    options.OnRejected = async (context, ct) => await context.HttpContext.Response.WriteAsJsonAsync(
+        new { message = "Too many requests. Please wait before trying again." }, ct);
+    options.AddPolicy("email-verification", context => RateLimitPartition.GetFixedWindowLimiter(
+        context.Connection.RemoteIpAddress?.ToString() ?? "unknown", _ => new FixedWindowRateLimiterOptions
+        { PermitLimit = 30, Window = TimeSpan.FromMinutes(10), QueueLimit = 0, AutoReplenishment = true }));
+    options.AddPolicy("password-recovery", context => RateLimitPartition.GetFixedWindowLimiter(
+        (context.Connection.RemoteIpAddress?.ToString() ?? "unknown") + context.Request.Path, _ => new FixedWindowRateLimiterOptions
+        { PermitLimit = 10, Window = TimeSpan.FromMinutes(15), QueueLimit = 0, AutoReplenishment = true }));
+});
 builder.Services.AddAuthorization();
 builder.Services
     .AddAuthentication(JwtBearerDefaults.AuthenticationScheme)
@@ -116,9 +133,11 @@ builder.Services
             {
                 var subject = context.Principal?.FindFirst("sub")?.Value;
                 var role = context.Principal?.FindFirst("role")?.Value;
+                var version = context.Principal?.FindFirst("auth_version")?.Value;
                 if (!int.TryParse(subject, out var userId) ||
+                    !int.TryParse(version, out var authVersion) ||
                     !await context.HttpContext.RequestServices.GetRequiredService<AuthService>()
-                        .IsTokenAccountActiveAsync(userId, role))
+                        .IsTokenAccountActiveAsync(userId, role, authVersion))
                     context.Fail("This account is unavailable.");
             },
             OnChallenge = context =>
@@ -154,6 +173,11 @@ using (var scope = app.Services.CreateScope())
     if (app.Environment.IsDevelopment())
     {
         await auth.SeedDevelopmentDataAsync();
+    }
+    // Explicit opt-in for an isolated public demo: catalog only, never predictable
+    // demo accounts. Normal Production startup does not seed sample data.
+    if (app.Environment.IsDevelopment() || builder.Configuration.GetValue<bool>("Demo:SeedCatalog"))
+    {
         await scope.ServiceProvider.GetRequiredService<IMenuService>().SeedDevelopmentDataAsync(app.Environment.ContentRootPath);
         await scope.ServiceProvider.GetRequiredService<CouponSeeder>().EnsureDevelopmentCouponsAsync();
     }
@@ -168,9 +192,17 @@ using (var scope = app.Services.CreateScope())
 }
 
 app.UseExceptionHandler();
+app.Use(async (context, next) =>
+{
+    if (context.Request.Path.StartsWithSegments("/api/auth") || context.Request.Path.StartsWithSegments("/api/users"))
+        context.Response.Headers.CacheControl = "no-store";
+    await next();
+});
 app.UseCors("Frontend");
 app.UseDefaultFiles();
 app.UseStaticFiles();
+app.UseRouting();
+app.UseRateLimiter();
 app.UseAuthentication();
 app.UseAuthorization();
 app.MapControllers();

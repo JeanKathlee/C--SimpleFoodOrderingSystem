@@ -30,6 +30,7 @@ public class FoodJsDbContext : DbContext
     public DbSet<Notification> Notifications => Set<Notification>();
     public DbSet<CheckoutSubmission> CheckoutSubmissions => Set<CheckoutSubmission>();
     public DbSet<PasswordResetToken> PasswordResetTokens => Set<PasswordResetToken>();
+    public DbSet<EmailVerificationToken> EmailVerificationTokens => Set<EmailVerificationToken>();
 
     protected override void OnModelCreating(ModelBuilder modelBuilder)
     {
@@ -53,6 +54,8 @@ public class FoodJsDbContext : DbContext
         modelBuilder.Entity<Coupon>().HasQueryFilter(c => !c.IsDeleted);
         modelBuilder.Entity<Notification>().HasQueryFilter(n => !n.IsDeleted && !n.User.IsDeleted);
         modelBuilder.Entity<PasswordResetToken>().HasQueryFilter(t => !t.IsDeleted && !t.User.IsDeleted);
+        modelBuilder.Entity<EmailVerificationToken>().HasQueryFilter(t => !t.IsDeleted && !t.User.IsDeleted && !t.User.Role.IsDeleted);
+        modelBuilder.Entity<EmailVerificationToken>().HasIndex(t => t.TokenHash).IsUnique();
         modelBuilder.Entity<CheckoutSubmission>().HasQueryFilter(s => !s.IsDeleted);
 
         foreach (var entity in modelBuilder.Model.GetEntityTypes())

@@ -7,7 +7,8 @@ using FoodJS.Api.Models;
 namespace FoodJS.Api.Services;
 
 // when something is wrong this throws BadHttpRequestException (400), the controller sends the message back
-public sealed class UsersService(IUserRepository repository, IUnitOfWorkRepository unitOfWork, AuthService authService)
+public sealed class UsersService(IUserRepository repository, IUnitOfWorkRepository unitOfWork, AuthService authService,
+    EmailVerificationService verification)
 {
     public async Task<List<AuthUserResponse>> GetAllAsync()
     {
@@ -28,7 +29,7 @@ public sealed class UsersService(IUserRepository repository, IUnitOfWorkReposito
         return user is null ? null : await authService.ToResponseAsync(user);
     }
 
-    public async Task<AuthResponse> RegisterAsync(RegisterRequest request)
+    public async Task<RegistrationResponse> RegisterAsync(RegisterRequest request)
     {
         var email = request.Email?.Trim() ?? "";
         var firstName = request.FirstName?.Trim() ?? "";
@@ -47,6 +48,8 @@ public sealed class UsersService(IUserRepository repository, IUnitOfWorkReposito
         {
             throw new BadHttpRequestException("Password must be at least 6 characters.");
         }
+        verification.EnsureConfigured();
+        await using var transaction = await unitOfWork.BeginTransactionAsync();
         if (await repository.EmailExistsAsync(email, 0))
         {
             throw new BadHttpRequestException("Email already in use.");
@@ -68,15 +71,18 @@ public sealed class UsersService(IUserRepository repository, IUnitOfWorkReposito
         {
             await SetMainAddressAsync(user, request.Address);
         }
+        var link = await verification.PrepareAsync(user);
         await unitOfWork.SaveAsync();
+        await transaction.CommitAsync();
 
-        // log them in right away, same as the old node api
-        return await authService.CreateSessionAsync(user, "Account created successfully.");
+        // No JWT/session is issued until ownership of the mailbox is confirmed.
+        return await verification.CompleteRegistrationAsync(user, link);
     }
 
     // returns null if the user doesn't exist
     public async Task<AuthUserResponse?> UpdateAsync(int id, UpdateProfileRequest request)
     {
+        await using var transaction = await unitOfWork.BeginTransactionAsync();
         var user = await FindAsync(id);
         if (user is null)
         {
@@ -99,6 +105,7 @@ public sealed class UsersService(IUserRepository repository, IUnitOfWorkReposito
                 throw new BadHttpRequestException("Last name cannot be empty.");
             }
         }
+        var emailChanged = false;
         if (request.Email is not null)
         {
             var email = request.Email.Trim();
@@ -113,6 +120,14 @@ public sealed class UsersService(IUserRepository repository, IUnitOfWorkReposito
                 throw new BadHttpRequestException("Email already in use.");
             }
 
+            emailChanged = !string.Equals(user.Email, email, StringComparison.OrdinalIgnoreCase);
+            if (emailChanged)
+            {
+                verification.EnsureConfigured();
+                user.IsEmailVerified = false;
+                user.AuthVersion++;
+                foreach (var token in await repository.UnusedResetTokensAsync(id)) token.UsedAt = DateTimeOffset.UtcNow;
+            }
             user.Email = email;
         }
         if (request.MobileNumber is not null)
@@ -132,7 +147,10 @@ public sealed class UsersService(IUserRepository repository, IUnitOfWorkReposito
             await SetMainAddressAsync(user, request.Address);
         }
 
+        var link = emailChanged ? await verification.PrepareAsync(user) : null;
         await unitOfWork.SaveAsync();
+        await transaction.CommitAsync();
+        if (link is not null) await verification.DeliverAsync(user.Email, link);
         return await authService.ToResponseAsync(user);
     }
 
@@ -167,6 +185,7 @@ public sealed class UsersService(IUserRepository repository, IUnitOfWorkReposito
         }
 
         user.IsDeleted = true;
+        user.AuthVersion++;
         await unitOfWork.SaveAsync();
         return true;
     }

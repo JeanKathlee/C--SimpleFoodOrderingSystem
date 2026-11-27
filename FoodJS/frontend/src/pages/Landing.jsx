@@ -108,27 +108,6 @@ const howItWorks = [
   },
 ];
 
-const testimonials = [
-  {
-    name: "Maria Santos",
-    role: "Food Lover",
-    text: "The best food delivery app I've used. Fast, reliable, and the food tastes amazing!",
-    avatar: "👩",
-  },
-  {
-    name: "Juan Dela Cruz",
-    role: "Busy Professional",
-    text: "Saves me so much time. Great variety and consistently excellent service.",
-    avatar: "👨",
-  },
-  {
-    name: "Rosa Miguel",
-    role: "Family of 4",
-    text: "Perfect for family orders. Coupons and deals make it even better!",
-    avatar: "👩‍🦰",
-  },
-];
-
 export default function Landing() {
   const navigate = useNavigate();
 
@@ -265,27 +244,6 @@ export default function Landing() {
           </div>
         </section>
 
-        <section className="landing-trust-section">
-          <div className="trust-grid">
-            <div className="trust-card">
-              <h4>50K+</h4>
-              <p>Happy Customers</p>
-            </div>
-            <div className="trust-card">
-              <h4>4.8★</h4>
-              <p>Average Rating</p>
-            </div>
-            <div className="trust-card">
-              <h4>30 mins</h4>
-              <p>Avg Delivery Time</p>
-            </div>
-            <div className="trust-card">
-              <h4>100%</h4>
-              <p>Fresh Guarantee</p>
-            </div>
-          </div>
-        </section>
-
         <section className="landing-section landing-how-it-works">
           <div className="section-title-row">
             <h3>How It Works</h3>
@@ -298,28 +256,6 @@ export default function Landing() {
                 <h4>{item.title}</h4>
                 <p>{item.description}</p>
               </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="landing-section landing-testimonials">
-          <div className="section-title-row">
-            <h3>What Customers Say</h3>
-            <p>Real feedback from real FoodJS lovers.</p>
-          </div>
-          <div className="testimonials-grid">
-            {testimonials.map((testimonial) => (
-              <article key={testimonial.name} className="testimonial-card">
-                <div className="testimonial-header">
-                  <span className="testimonial-avatar">{testimonial.avatar}</span>
-                  <div>
-                    <h4>{testimonial.name}</h4>
-                    <p>{testimonial.role}</p>
-                  </div>
-                </div>
-                <p className="testimonial-text">"{testimonial.text}"</p>
-                <div className="testimonial-rating">⭐⭐⭐⭐⭐</div>
-              </article>
             ))}
           </div>
         </section>

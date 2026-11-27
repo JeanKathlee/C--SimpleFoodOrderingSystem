@@ -10,6 +10,7 @@ const Register = lazy(() => import("./pages/Register"));
 const AuthCallback = lazy(() => import("./pages/AuthCallback"));
 const ForgotPassword = lazy(() => import("./pages/ForgotPassword"));
 const ResetPassword = lazy(() => import("./pages/ResetPassword"));
+const VerifyEmail = lazy(() => import("./pages/VerifyEmail"));
 const Dashboard = lazy(() => import("./pages/Dashboard"));
 const Menu = lazy(() => import("./pages/Menu"));
 const ProductDetails = lazy(() => import("./pages/ProductDetails"));
@@ -57,6 +58,7 @@ export default function App() {
         <Route path="/auth/callback" element={<AuthCallback />} />
         <Route path="/forgot-password" element={<ForgotPassword />} />
         <Route path="/reset-password" element={<ResetPassword />} />
+        <Route path="/verify-email" element={<VerifyEmail />} />
         <Route
           path="/dashboard"
           element={

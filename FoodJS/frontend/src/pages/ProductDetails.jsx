@@ -13,20 +13,23 @@ export default function ProductDetails() {
   const [choice, setChoice] = useState("");
   const [loading, setLoading] = useState(true);
 
-  const choiceOptions = [
-    { label: "Go Large Iced Tea", addOn: 50 },
-    { label: "Go Medium Iced Tea", addOn: 45 },
-    { label: "Go Regular Iced Tea", addOn: 0 },
-  ];
+  const choiceOptions = item?.drinkOptions ?? [];
 
   // load the food item from the C# backend (/api/menu/{id})
   useEffect(() => {
+    let active = true;
+    setLoading(true);
+    setItem(null);
     setChoice("");
     setQuantity(1);
     fetchMenuItem(id).then((found) => {
-      setItem(found ? enrichMenuWithImages([found])[0] : null);
+      if (!active) return;
+      const loaded = found ? enrichMenuWithImages([found])[0] : null;
+      setItem(loaded);
+      setChoice(loaded?.drinkOptions?.find(option => option.addOn === 0)?.label ?? "");
       setLoading(false);
     });
+    return () => { active = false; };
   }, [id]);
 
   if (!item) {
@@ -51,7 +54,7 @@ export default function ProductDetails() {
   const description = item.description || "No description available";
 
   const handleAddToBag = async () => {
-    if (!choice) {
+    if (choiceOptions.length > 0 && !choice) {
       errorNotif("Please select a drink before adding this item to your cart.");
       return;
     }
@@ -128,9 +131,9 @@ export default function ProductDetails() {
 
             <p className="product-description">{description}</p>
 
-            <div className="product-choice-block">
+            {choiceOptions.length > 0 && <div className="product-choice-block">
               <h3>Drink Choice</h3>
-              <p>Select 1 option</p>
+              <p>Included drink selected by default. You can choose another option.</p>
 
               <div className="choice-list">
                 {choiceOptions.map((option) => (
@@ -148,7 +151,7 @@ export default function ProductDetails() {
                   </label>
                 ))}
               </div>
-            </div>
+            </div>}
 
             <div className="product-action-row">
               <div className="product-qty-row">

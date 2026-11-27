@@ -29,7 +29,7 @@ public sealed class SoftDeleteApiTests : IAsyncLifetime
         {
             var db = scope.ServiceProvider.GetRequiredService<FoodJsDbContext>();
             var user = new User { FirstName = "Admin", LastName = "QA", Email = "admin@soft.invalid",
-                PasswordHash = "", Role = await db.Roles.SingleAsync(r => r.Name == "admin") };
+                PasswordHash = "", IsEmailVerified = true, Role = await db.Roles.SingleAsync(r => r.Name == "admin") };
             user.PasswordHash = AuthService.Hasher.HashPassword(user, Password);
             db.Users.Add(user); await db.SaveChangesAsync();
         }
@@ -41,7 +41,7 @@ public sealed class SoftDeleteApiTests : IAsyncLifetime
         customer = NewClient(customerSession.Token); other = NewClient(otherSession.Token);
         var categoryResult = await admin.PostAsJsonAsync("/api/categories", new { name = "Soft category", description = "QA" });
         category = (await categoryResult.Content.ReadFromJsonAsync<CategoryResponse>())!;
-        var itemResult = await admin.PostAsJsonAsync("/api/menu", new { name = "Soft meal", categoryId = category.Id, price = 100, prepTime = 5 });
+        var itemResult = await admin.PostAsJsonAsync("/api/menu", new { name = "Soft meal", categoryId = category.Id, price = 100, prepTime = 5, drinkOptions = TestMealDrinks.Options });
         menu = (await itemResult.Content.ReadFromJsonAsync<MenuItemResponse>())!;
     }
 
@@ -57,7 +57,10 @@ public sealed class SoftDeleteApiTests : IAsyncLifetime
         var response = await anonymous.PostAsJsonAsync("/api/users/register", new
         { email, password = Password, firstName = "Soft", lastName = "Customer", address = "Original delivery, Cebu" });
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
-        return (await response.Content.ReadFromJsonAsync<AuthResponse>())!;
+        Assert.Equal(HttpStatusCode.OK, (await factory.ConfirmEmailAsync(anonymous, email)).StatusCode);
+        var login = await anonymous.PostAsJsonAsync("/api/users/login", new { email, password = Password });
+        Assert.Equal(HttpStatusCode.OK, login.StatusCode);
+        return (await login.Content.ReadFromJsonAsync<AuthResponse>())!;
     }
 
     private async Task Add(HttpClient client, string choice = "Go Regular Iced Tea")
@@ -71,7 +74,7 @@ public sealed class SoftDeleteApiTests : IAsyncLifetime
         var response = await customer.PostAsJsonAsync("/api/orders", new
         {
             customerName = "Saved recipient", mobileNumber = "09171234567", address = "Original delivery, Cebu",
-            items = new[] { new { menuItemId = menu.Id, quantity = 1 } }, couponCode = coupon, idempotencyKey = key
+            items = new[] { new { menuItemId = menu.Id, quantity = 1, selectedChoice = "Go Regular Iced Tea" } }, couponCode = coupon, idempotencyKey = key
         });
         Assert.Equal(HttpStatusCode.Created, response.StatusCode);
         return (await response.Content.ReadFromJsonAsync<OrderResponse>())!;
@@ -140,7 +143,9 @@ public sealed class SoftDeleteApiTests : IAsyncLifetime
     {
         var order = await Order();
         var forgot = await anonymous.PostAsJsonAsync("/api/auth/forgot-password", new { email = customerSession.User.Email });
-        var token = (await forgot.Content.ReadFromJsonAsync<ForgotPasswordResponse>())!.ResetToken;
+        Assert.Equal(HttpStatusCode.OK, forgot.StatusCode);
+        var token = Microsoft.AspNetCore.WebUtilities.QueryHelpers.ParseQuery(
+            factory.Emails.PasswordResets.Last().Link.Fragment.TrimStart('#'))["token"].ToString();
         Assert.False(string.IsNullOrEmpty(token));
         Assert.Equal(HttpStatusCode.OK, (await admin.DeleteAsync($"/api/users/{customerSession.User.Id}")).StatusCode);
         foreach (var path in new[] { "/api/users/me", "/api/cart", "/api/orders", "/api/notifications" })

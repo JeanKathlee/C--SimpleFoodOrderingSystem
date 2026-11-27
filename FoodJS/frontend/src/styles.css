@@ -3009,6 +3009,8 @@ body {
 }
 
 .cart-summary {
+  position: sticky;
+  top: 16px;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -3220,6 +3222,10 @@ body {
 }
 
 @media (max-width: 900px) {
+  .cart-summary {
+    position: static;
+  }
+
   .order-hero {
     flex-direction: column;
     align-items: flex-start;
@@ -3709,6 +3715,11 @@ body {
 }
 
 .menu-bag-dropdown {
+  display: flex;
+  flex-direction: column;
+  /* Keep header/footer outside the scrolling item list, even on short screens. */
+  max-height: max(280px, min(680px, calc(100vh - 180px)));
+  max-height: max(280px, min(680px, calc(100dvh - 180px)));
   position: absolute;
   right: 0;
   top: calc(100% + 10px);
@@ -3735,6 +3746,7 @@ body {
 
 .menu-bag-header {
   display: flex;
+  flex-shrink: 0;
   justify-content: space-between;
   align-items: center;
   gap: 10px;
@@ -3750,9 +3762,16 @@ body {
   display: flex;
   flex-direction: column;
   gap: 10px;
+  min-height: 0;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  scrollbar-gutter: stable;
+  padding-right: 4px;
 }
 
 .menu-bag-item {
+  flex-shrink: 0;
+  overflow-wrap: anywhere;
   background: #fff7ef;
   border: 1px solid #f2dcc6;
   border-radius: 14px;
@@ -3803,7 +3822,10 @@ body {
 }
 
 .menu-bag-total {
+  flex-shrink: 0;
   margin-top: 12px;
+  padding-top: 12px;
+  border-top: 1px solid #f2dcc6;
   display: flex;
   flex-direction: column;
   gap: 12px;
@@ -5073,51 +5095,6 @@ body {
   }
 }/* ========== ENHANCED LANDING PAGE STYLES ========== */
 
-/* Trust Signals Section */
-.landing-trust-section {
-  margin-top: 24px;
-  margin-bottom: 28px;
-  padding: 30px 20px;
-  background: linear-gradient(135deg, #fff7f0 0%, #fff9f3 100%);
-  border-radius: 24px;
-  border: 1px solid #ffe5cc;
-}
-
-.trust-grid {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
-  gap: 16px;
-}
-
-.trust-card {
-  background: #ffffff;
-  border-radius: 16px;
-  padding: 20px;
-  text-align: center;
-  box-shadow: 0 4px 12px rgba(47, 36, 24, 0.06);
-  border: 1px solid #eee3d8;
-  transition: transform 0.3s ease, box-shadow 0.3s ease;
-}
-
-.trust-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 8px 20px rgba(47, 36, 24, 0.1);
-}
-
-.trust-card h4 {
-  font-size: 28px;
-  font-weight: 800;
-  color: #ff8a00;
-  margin: 0 0 8px 0;
-  font-family: "Baloo 2", sans-serif;
-}
-
-.trust-card p {
-  font-size: 14px;
-  color: #6f6256;
-  margin: 0;
-}
-
 /* How It Works Section */
 .landing-how-it-works {
   margin-top: 24px;
@@ -5175,72 +5152,6 @@ body {
   font-size: 24px;
   color: #ff8a00;
   display: none;
-}
-
-/* Testimonials Section */
-.landing-testimonials {
-  margin-top: 24px;
-}
-
-.testimonials-grid {
-  margin-top: 20px;
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(250px, 1fr));
-  gap: 16px;
-}
-
-.testimonial-card {
-  background: #ffffff;
-  border-radius: 16px;
-  padding: 20px;
-  border: 1px solid #eee3d8;
-  box-shadow: 0 4px 12px rgba(47, 36, 24, 0.06);
-  transition: all 0.3s ease;
-}
-
-.testimonial-card:hover {
-  transform: translateY(-4px);
-  box-shadow: 0 12px 24px rgba(47, 36, 24, 0.12);
-  border-color: #ffd6ad;
-}
-
-.testimonial-header {
-  display: flex;
-  gap: 12px;
-  align-items: flex-start;
-  margin-bottom: 12px;
-}
-
-.testimonial-avatar {
-  font-size: 40px;
-  flex-shrink: 0;
-}
-
-.testimonial-header h4 {
-  font-size: 15px;
-  font-weight: 700;
-  margin: 0 0 2px 0;
-  color: #1a1a1a;
-  font-family: "Baloo 2", sans-serif;
-}
-
-.testimonial-header p {
-  font-size: 12px;
-  color: #999;
-  margin: 0;
-}
-
-.testimonial-text {
-  font-size: 14px;
-  color: #4a4a4a;
-  line-height: 1.6;
-  margin: 12px 0;
-  font-style: italic;
-}
-
-.testimonial-rating {
-  font-size: 14px;
-  color: #ffa500;
 }
 
 /* Final CTA Section */
@@ -5452,10 +5363,6 @@ body {
 /* ========== RESPONSIVE STYLES ========== */
 
 @media (max-width: 1080px) {
-  .trust-grid {
-    grid-template-columns: repeat(2, 1fr);
-  }
-
   .auth-container {
     grid-template-columns: 1fr;
     gap: 20px;
@@ -5472,23 +5379,6 @@ body {
 }
 
 @media (max-width: 760px) {
-  .trust-grid {
-    grid-template-columns: repeat(2, 1fr);
-    gap: 12px;
-  }
-
-  .trust-card {
-    padding: 16px;
-  }
-
-  .trust-card h4 {
-    font-size: 24px;
-  }
-
-  .trust-card p {
-    font-size: 12px;
-  }
-
   .how-it-works-grid {
     grid-template-columns: 1fr;
   }
@@ -5499,10 +5389,6 @@ body {
 
   .how-it-works-card {
     padding: 20px 16px;
-  }
-
-  .testimonials-grid {
-    grid-template-columns: 1fr;
   }
 
   .landing-final-cta {
